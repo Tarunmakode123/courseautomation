@@ -1,27 +1,49 @@
 import { NextResponse } from "next/server";
 
-// Helper to normalize notes object keys
+// Helper to ensure values are safe string arrays
+function ensureArray(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)));
+  }
+  if (typeof val === "string") {
+    const lines = val
+      .split("\n")
+      .map((s) => s.replace(/^[-*•\d+.]\s*/, "").trim())
+      .filter(Boolean);
+    return lines.length > 0 ? lines : [val];
+  }
+  return [String(val)];
+}
+
+// Helper to normalize notes object keys safely
 function normalizeNotesObject(obj: any): any {
   if (!obj || typeof obj !== "object") return obj;
 
   // Merge root object and nested content object if present
   const source = obj.content && typeof obj.content === "object" ? { ...obj, ...obj.content } : obj;
 
+  const titleStr = typeof source.title === "string" ? source.title : (typeof source.heading === "string" ? source.heading : "");
+  const introStr = typeof source.introduction === "string" ? source.introduction : (typeof source.intro === "string" ? source.intro : "");
+  const defStr = typeof source.definition === "string" ? source.definition : (typeof source.def === "string" ? source.def : "");
+  const expStr = typeof source.detailed_explanation === "string" ? source.detailed_explanation : (typeof source.explanation === "string" ? source.explanation : (typeof source.description === "string" ? source.description : ""));
+  const sumStr = typeof source.summary === "string" ? source.summary : (typeof source.conclusion === "string" ? source.conclusion : "");
+
   return {
-    title: source.title || source.heading || "",
-    introduction: source.introduction || source.intro || "",
-    definition: source.definition || source.def || "",
-    keyTerminology: source.key_terminology || source.keyTerminology || source.terminology || [],
-    coreConcepts: source.core_concepts || source.coreConcepts || source.concepts || [],
-    explanation: source.detailed_explanation || source.explanation || source.detailedExplanation || source.description || "",
-    typesOrClassification: source.types_or_classification || source.typesOrClassification || source.types || source.classifications || [],
-    steps: source.steps || source.procedure || [],
-    examples: source.examples || source.code_examples || [],
-    applications: source.applications || source.uses || [],
-    advantages: source.advantages || source.benefits || [],
-    limitations: source.limitations || source.disadvantages || [],
-    importantExamPoints: source.important_exam_points || source.importantExamPoints || source.exam_points || [],
-    summary: source.summary || source.conclusion || "",
+    title: titleStr,
+    introduction: introStr,
+    definition: defStr,
+    keyTerminology: ensureArray(source.key_terminology || source.keyTerminology || source.terminology),
+    coreConcepts: ensureArray(source.core_concepts || source.coreConcepts || source.concepts),
+    explanation: expStr,
+    typesOrClassification: ensureArray(source.types_or_classification || source.typesOrClassification || source.types || source.classifications),
+    steps: ensureArray(source.steps || source.procedure),
+    examples: ensureArray(source.examples || source.code_examples),
+    applications: ensureArray(source.applications || source.uses),
+    advantages: ensureArray(source.advantages || source.benefits),
+    limitations: ensureArray(source.limitations || source.disadvantages),
+    importantExamPoints: ensureArray(source.important_exam_points || source.importantExamPoints || source.exam_points),
+    summary: sumStr,
   };
 }
 
@@ -97,24 +119,26 @@ function parseImages(imagesObj: any): any {
   if (!imagesObj) return null;
   if (imagesObj.generated === false) return null;
 
+  if (typeof imagesObj !== "object") return null;
+
   const result: any = {};
-  if (imagesObj.infographic) result.infographic = imagesObj.infographic;
-  if (imagesObj.diagram) result.diagram = imagesObj.diagram;
-  if (imagesObj.table) result.table = imagesObj.table;
-  if (imagesObj.flowchart) result.flowchart = imagesObj.flowchart;
+  if (imagesObj.infographic && typeof imagesObj.infographic === "string") result.infographic = imagesObj.infographic;
+  if (imagesObj.diagram && typeof imagesObj.diagram === "string") result.diagram = imagesObj.diagram;
+  if (imagesObj.table && typeof imagesObj.table === "string") result.table = imagesObj.table;
+  if (imagesObj.flowchart && typeof imagesObj.flowchart === "string") result.flowchart = imagesObj.flowchart;
 
   if (Object.keys(result).length > 0) return result;
 
   if (Array.isArray(imagesObj) && imagesObj.length > 0) {
     return {
-      infographic: imagesObj[0] || null,
-      diagram: imagesObj[1] || null,
-      table: imagesObj[2] || null,
-      flowchart: imagesObj[3] || null,
+      infographic: typeof imagesObj[0] === "string" ? imagesObj[0] : null,
+      diagram: typeof imagesObj[1] === "string" ? imagesObj[1] : null,
+      table: typeof imagesObj[2] === "string" ? imagesObj[2] : null,
+      flowchart: typeof imagesObj[3] === "string" ? imagesObj[3] : null,
     };
   }
 
-  return imagesObj;
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -176,7 +200,6 @@ export async function POST(request: Request) {
             data: {
               notes: parsedNotes,
               images: parsedImages,
-              raw: rawData,
             },
           });
         }
@@ -197,6 +220,10 @@ export async function POST(request: Request) {
       title: `${body.subject} — ${body.unit}: ${body.topic}`,
       introduction: `This comprehensive material covers ${body.topic} under ${body.unit} of the ${body.subject} course (RGPV AIML syllabus). It provides clear theoretical foundations, step-by-step concepts, exam-focused points, and practical insights.`,
       definition: `${body.topic} is a fundamental concept in ${body.subject} designed to process, analyze, and transform data models efficiently in Artificial Intelligence and Machine Learning applications.`,
+      keyTerminology: [
+        `Syntax Pattern: Standard sequence representing target grammar rule`,
+        `State Machine: Transition model evaluating boundary conditions`,
+      ],
       coreConcepts: [
         `Fundamental Architecture of ${body.topic}`,
         `Mathematical Formulation & Algorithmic Steps`,
@@ -204,6 +231,10 @@ export async function POST(request: Request) {
         `Integration within Modern ${body.subject} Pipelines`,
       ],
       explanation: `In RGPV academic curriculum, ${body.topic} is analyzed through both structural mechanics and algorithmic performance. Students are expected to understand the underlying mathematical transformations, boundary conditions, and real-world trade-offs.`,
+      typesOrClassification: [
+        `Deterministic Model: Predictable single-path transition`,
+        `Non-Deterministic Model: Multi-path transition space`,
+      ],
       steps: [
         `Step 1: Input Data Preprocessing & Sanitization`,
         `Step 2: Feature Matrix Extraction & Dimensionality Setup`,

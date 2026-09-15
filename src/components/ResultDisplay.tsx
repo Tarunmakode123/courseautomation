@@ -37,9 +37,19 @@ interface ResultDisplayProps {
   onReset: () => void;
 }
 
+// Safe Array Helper
+function safeArray(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)));
+  }
+  if (typeof val === "string") return [val];
+  return [];
+}
+
 // Simple helper component to render Markdown text cleanly if string notes are returned
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
-  const paragraphs = content.split("\n\n");
+  const paragraphs = (content || "").split("\n\n");
 
   return (
     <div className="space-y-4 text-darkText leading-relaxed">
@@ -118,6 +128,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
 
 // Helper for inline **bold** text
 function formatInlineBold(text: string) {
+  if (typeof text !== "string") return String(text);
   const parts = text.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -181,6 +192,19 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
       document.body.removeChild(link);
     }
   };
+
+  const keyTerminologyArr = safeArray(notes?.keyTerminology);
+  const coreConceptsArr = safeArray(notes?.coreConcepts);
+  const typesOrClassificationArr = safeArray(notes?.typesOrClassification);
+  const stepsArr = safeArray(notes?.steps);
+  const examplesArr = safeArray(notes?.examples);
+  const labObjectivesArr = safeArray(notes?.labObjectives);
+  const applicationsArr = safeArray(notes?.applications);
+  const advantagesArr = safeArray(notes?.advantages);
+  const limitationsArr = safeArray(notes?.limitations);
+  const importantExamPointsArr = safeArray(notes?.importantExamPoints);
+
+  const safeImagesObj = (images && typeof images === "object" && !Array.isArray(images)) ? images : null;
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto my-8">
@@ -268,13 +292,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Key Terminology */}
-                {notes.keyTerminology && notes.keyTerminology.length > 0 && (
+                {keyTerminologyArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <Tag className="w-4 h-4" /> Key Terminology
                     </h4>
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
-                      {notes.keyTerminology.map((item: string, i: number) => (
+                      {keyTerminologyArr.map((item, i) => (
                         <li key={i}>{formatInlineBold(item)}</li>
                       ))}
                     </ul>
@@ -282,13 +306,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Core Concepts */}
-                {notes.coreConcepts && notes.coreConcepts.length > 0 && (
+                {coreConceptsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <Layers className="w-4 h-4" /> Core Concepts
                     </h4>
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
-                      {notes.coreConcepts.map((item: string, i: number) => (
+                      {coreConceptsArr.map((item, i) => (
                         <li key={i}>{formatInlineBold(item)}</li>
                       ))}
                     </ul>
@@ -306,13 +330,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Types & Classification */}
-                {notes.typesOrClassification && notes.typesOrClassification.length > 0 && (
+                {typesOrClassificationArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <ListOrdered className="w-4 h-4" /> Types & Classifications
                     </h4>
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
-                      {notes.typesOrClassification.map((item: string, i: number) => (
+                      {typesOrClassificationArr.map((item, i) => (
                         <li key={i}>{formatInlineBold(item)}</li>
                       ))}
                     </ul>
@@ -320,13 +344,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Steps */}
-                {notes.steps && notes.steps.length > 0 && (
+                {stepsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Step-by-Step Procedure
                     </h4>
                     <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1.5">
-                      {notes.steps.map((step: string, i: number) => (
+                      {stepsArr.map((step, i) => (
                         <li key={i}>{formatInlineBold(step)}</li>
                       ))}
                     </ol>
@@ -334,13 +358,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Examples */}
-                {notes.examples && notes.examples.length > 0 && (
+                {examplesArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Examples & Code Illustration
                     </h4>
                     <div className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto space-y-1">
-                      {notes.examples.map((ex: string, i: number) => (
+                      {examplesArr.map((ex, i) => (
                         <div key={i}>{ex}</div>
                       ))}
                     </div>
@@ -348,13 +372,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Lab Specific Fields */}
-                {notes.labObjectives && (
+                {labObjectivesArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Lab Objectives
                     </h4>
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-                      {notes.labObjectives.map((obj: string, i: number) => (
+                      {labObjectivesArr.map((obj, i) => (
                         <li key={i}>{obj}</li>
                       ))}
                     </ul>
@@ -362,13 +386,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 )}
 
                 {/* Applications */}
-                {notes.applications && notes.applications.length > 0 && (
+                {applicationsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Real-World Applications
                     </h4>
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
-                      {notes.applications.map((app: string, i: number) => (
+                      {applicationsArr.map((app, i) => (
                         <li key={i}>{formatInlineBold(app)}</li>
                       ))}
                     </ul>
@@ -377,22 +401,22 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
 
                 {/* Advantages & Limitations */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {notes.advantages && notes.advantages.length > 0 && (
+                  {advantagesArr.length > 0 && (
                     <div className="p-4 bg-green-50/60 rounded-lg border border-green-100">
                       <h5 className="font-bold text-green-800 text-sm mb-2">Advantages</h5>
                       <ul className="list-disc pl-4 text-xs text-green-900 space-y-1">
-                        {notes.advantages.map((adv: string, i: number) => (
+                        {advantagesArr.map((adv, i) => (
                           <li key={i}>{formatInlineBold(adv)}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {notes.limitations && notes.limitations.length > 0 && (
+                  {limitationsArr.length > 0 && (
                     <div className="p-4 bg-red-50/60 rounded-lg border border-red-100">
                       <h5 className="font-bold text-red-800 text-sm mb-2">Limitations</h5>
                       <ul className="list-disc pl-4 text-xs text-red-900 space-y-1">
-                        {notes.limitations.map((lim: string, i: number) => (
+                        {limitationsArr.map((lim, i) => (
                           <li key={i}>{formatInlineBold(lim)}</li>
                         ))}
                       </ul>
@@ -401,14 +425,14 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 </div>
 
                 {/* Important Exam Points */}
-                {notes.importantExamPoints && notes.importantExamPoints.length > 0 && (
+                {importantExamPointsArr.length > 0 && (
                   <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
                     <h4 className="text-sm font-bold text-orange-900 mb-2 flex items-center gap-2">
                       <HelpCircle className="w-4 h-4 text-orange-600" />
                       Important RGPV Exam Points
                     </h4>
                     <ul className="list-disc pl-5 text-xs text-orange-950 space-y-1 font-medium">
-                      {notes.importantExamPoints.map((pt: string, i: number) => (
+                      {importantExamPointsArr.map((pt, i) => (
                         <li key={i}>{formatInlineBold(pt)}</li>
                       ))}
                     </ul>
@@ -433,7 +457,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
       )}
 
       {/* IMAGES RESULT SECTION */}
-      {images && (
+      {safeImagesObj && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-darkText flex items-center gap-2">
@@ -448,7 +472,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
             <VisualCard
               title="1. Infographic"
               typeSuffix="Infographic"
-              imageUrl={images.infographic}
+              imageUrl={safeImagesObj.infographic}
               onDownload={(url) => downloadImage(url, "Infographic")}
             />
 
@@ -456,7 +480,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
             <VisualCard
               title="2. Diagram"
               typeSuffix="Diagram"
-              imageUrl={images.diagram}
+              imageUrl={safeImagesObj.diagram}
               onDownload={(url) => downloadImage(url, "Diagram")}
             />
 
@@ -464,7 +488,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
             <VisualCard
               title="3. Table"
               typeSuffix="Table"
-              imageUrl={images.table}
+              imageUrl={safeImagesObj.table}
               onDownload={(url) => downloadImage(url, "Table")}
             />
 
@@ -472,7 +496,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
             <VisualCard
               title="4. Flowchart"
               typeSuffix="Flowchart"
-              imageUrl={images.flowchart}
+              imageUrl={safeImagesObj.flowchart}
               onDownload={(url) => downloadImage(url, "Flowchart")}
             />
           </div>
