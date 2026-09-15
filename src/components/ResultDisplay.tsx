@@ -13,6 +13,17 @@ import {
   HelpCircle,
   Tag,
   ListOrdered,
+  Code2,
+  Table as TableIcon,
+  PenTool,
+  Award,
+  AlertCircle,
+  HelpCircle as QuestionIcon,
+  Lightbulb,
+  FileQuestion,
+  FileCode,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 
 export interface GeneratedResultData {
@@ -38,16 +49,26 @@ interface ResultDisplayProps {
 }
 
 // Safe Array Helper
-function safeArray(val: any): string[] {
+function safeArray(val: any): any[] {
   if (!val) return [];
-  if (Array.isArray(val)) {
-    return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)));
-  }
+  if (Array.isArray(val)) return val;
   if (typeof val === "string") return [val];
   return [];
 }
 
-// Simple helper component to render Markdown text cleanly if string notes are returned
+// Helper for inline **bold** text
+function formatInlineBold(text: string) {
+  if (typeof text !== "string") return String(text || "");
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold text-darkText">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+// Helper component for markdown rendering
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   const paragraphs = (content || "").split("\n\n");
 
@@ -57,7 +78,6 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         const trimmed = p.trim();
         if (!trimmed) return null;
 
-        // Headings
         if (trimmed.startsWith("### ")) {
           return (
             <h4 key={idx} className="text-base font-bold text-orange-600 mt-4 mb-2">
@@ -81,7 +101,6 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           );
         }
 
-        // Bullet lists
         if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
           const items = trimmed.split("\n").map((line) => line.replace(/^[-*]\s*/, ""));
           return (
@@ -93,7 +112,6 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           );
         }
 
-        // Numbered lists
         if (/^\d+\.\s/.test(trimmed)) {
           const items = trimmed.split("\n").map((line) => line.replace(/^\d+\.\s*/, ""));
           return (
@@ -105,17 +123,15 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           );
         }
 
-        // Code block
         if (trimmed.startsWith("```")) {
           const codeText = trimmed.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "");
           return (
-            <pre key={idx} className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto my-3">
+            <pre key={idx} className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto my-3 whitespace-pre">
               <code>{codeText}</code>
             </pre>
           );
         }
 
-        // Normal paragraph
         return (
           <p key={idx} className="text-sm text-gray-800">
             {formatInlineBold(trimmed)}
@@ -125,18 +141,6 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
     </div>
   );
 };
-
-// Helper for inline **bold** text
-function formatInlineBold(text: string) {
-  if (typeof text !== "string") return String(text);
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i} className="font-semibold text-darkText">{part.slice(2, -2)}</strong>;
-    }
-    return part;
-  });
-}
 
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) => {
   const { notes, images, requestInfo } = data;
@@ -182,7 +186,6 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (e) {
-      // Fallback
       const link = document.createElement("a");
       link.href = url;
       link.download = filename;
@@ -193,18 +196,26 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
     }
   };
 
+  const safeImagesObj = (images && typeof images === "object" && !Array.isArray(images) && (images as any).generated !== false) ? images : null;
+
+  // Extract arrays safely
   const keyTerminologyArr = safeArray(notes?.keyTerminology);
   const coreConceptsArr = safeArray(notes?.coreConcepts);
-  const typesOrClassificationArr = safeArray(notes?.typesOrClassification);
+  const componentsArr = safeArray(notes?.components);
+  const workingArr = safeArray(notes?.working);
   const stepsArr = safeArray(notes?.steps);
-  const examplesArr = safeArray(notes?.examples);
-  const labObjectivesArr = safeArray(notes?.labObjectives);
+  const formulasArr = safeArray(notes?.formulas);
   const applicationsArr = safeArray(notes?.applications);
   const advantagesArr = safeArray(notes?.advantages);
   const limitationsArr = safeArray(notes?.limitations);
   const importantExamPointsArr = safeArray(notes?.importantExamPoints);
-
-  const safeImagesObj = (images && typeof images === "object" && !Array.isArray(images)) ? images : null;
+  const typesOrClassificationArr = safeArray(notes?.typesOrClassification);
+  const examplesArr = safeArray(notes?.examples);
+  const codeExamplesArr = safeArray(notes?.codeExamples);
+  const diagramsArr = safeArray(notes?.diagrams);
+  const tablesArr = safeArray(notes?.tables);
+  const probableQuestions = notes?.probableExamQuestions || null;
+  const sevenMarkGuide = notes?.sevenMarkAnswerGuide || null;
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto my-8">
@@ -232,6 +243,15 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
         </button>
       </div>
 
+      {/* NO NOTES MSG IF NONE RETURNED */}
+      {!notes && (
+        <div className="bg-white rounded-xl border border-appBorder p-8 text-center text-secondaryText">
+          <FileQuestion className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+          <p className="font-semibold text-darkText text-base">No lecture notes were generated for this request.</p>
+          <p className="text-xs text-gray-500 mt-1">Please try selecting the Notes option and click Generate again.</p>
+        </div>
+      )}
+
       {/* NOTES RESULT SECTION */}
       {notes && (
         <div className="bg-white rounded-xl border border-appBorder shadow-sm overflow-hidden">
@@ -257,196 +277,568 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
             </button>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-6 text-darkText leading-relaxed">
+          <div className="p-6 sm:p-8 space-y-7 text-darkText leading-relaxed">
             {typeof notes === "string" ? (
               <MarkdownText content={notes} />
             ) : (
               <>
                 {/* Title */}
                 {notes.title && (
-                  <h3 className="text-xl font-bold text-darkText border-b border-appBorder pb-2">
+                  <h3 className="text-xl font-bold text-darkText border-b border-appBorder pb-2.5">
                     {notes.title}
                   </h3>
                 )}
 
-                {/* Introduction */}
+                {/* 1. Introduction */}
                 {notes.introduction && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4" /> Introduction
+                      <BookOpen className="w-4 h-4" /> 1. Introduction
                     </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed">{notes.introduction}</p>
+                    <p className="text-sm text-gray-800 leading-relaxed">{formatInlineBold(notes.introduction)}</p>
                   </div>
                 )}
 
-                {/* Definition */}
+                {/* 2. Definition */}
                 {notes.definition && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" /> Definition
+                      <CheckCircle2 className="w-4 h-4" /> 2. Definition
                     </h4>
-                    <p className="text-sm text-gray-800 bg-orange-50/70 p-3.5 rounded-lg border border-orange-100 font-medium leading-relaxed">
-                      {notes.definition}
-                    </p>
+                    <div className="text-sm text-gray-800 bg-orange-50/70 p-4 rounded-xl border border-orange-100 font-medium leading-relaxed">
+                      {formatInlineBold(notes.definition)}
+                    </div>
                   </div>
                 )}
 
-                {/* Key Terminology */}
+                {/* 3. Key Terminology */}
                 {keyTerminologyArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <Tag className="w-4 h-4" /> Key Terminology
+                      <Tag className="w-4 h-4" /> 3. Key Terminology
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
+                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {keyTerminologyArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(item)}</li>
+                        <li key={i}>{formatInlineBold(typeof item === "string" ? item : JSON.stringify(item))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Core Concepts */}
+                {/* 4. Core Concepts */}
                 {coreConceptsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <Layers className="w-4 h-4" /> Core Concepts
+                      <Layers className="w-4 h-4" /> 4. Core Concepts
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
+                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {coreConceptsArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(item)}</li>
+                        <li key={i}>{formatInlineBold(typeof item === "string" ? item : JSON.stringify(item))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Detailed Explanation */}
+                {/* 5. Detailed Explanation */}
                 {notes.explanation && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Detailed Explanation
+                      5. Detailed Explanation
                     </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed">{notes.explanation}</p>
+                    <div className="text-sm text-gray-800 leading-relaxed space-y-2">
+                      {formatInlineBold(notes.explanation)}
+                    </div>
                   </div>
                 )}
 
-                {/* Types & Classification */}
+                {/* 6. Types & Classifications */}
                 {typesOrClassificationArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <ListOrdered className="w-4 h-4" /> Types & Classifications
+                    <h4 className="text-base font-bold text-orange-600 mb-3 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <ListOrdered className="w-4 h-4" /> 6. Types & Classifications
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
-                      {typesOrClassificationArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(item)}</li>
+                    <div className="space-y-3">
+                      {typesOrClassificationArr.map((item, i) => {
+                        if (typeof item === "object" && item !== null) {
+                          return (
+                            <div key={i} className="p-4 bg-gray-50 rounded-xl border border-appBorder">
+                              <h5 className="font-bold text-darkText text-sm mb-1">{item.type || item.title || `Type ${i+1}`}</h5>
+                              {item.description && <p className="text-xs text-gray-700 mb-2">{formatInlineBold(item.description)}</p>}
+                              {item.examples && Array.isArray(item.examples) && (
+                                <div className="text-xs text-orange-700 bg-orange-50/60 p-2.5 rounded border border-orange-100">
+                                  <span className="font-semibold">Examples:</span> {item.examples.join(", ")}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={i} className="text-sm text-gray-800 pl-4 border-l-2 border-orange-400 py-0.5">
+                            {formatInlineBold(String(item))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Components */}
+                {componentsArr.length > 0 && (
+                  <div>
+                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
+                      7. System Components
+                    </h4>
+                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
+                      {componentsArr.map((comp, i) => (
+                        <li key={i}>{formatInlineBold(typeof comp === "string" ? comp : JSON.stringify(comp))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Steps */}
-                {stepsArr.length > 0 && (
+                {/* 8. Working / Working Principle */}
+                {workingArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Step-by-Step Procedure
+                      8. Working & Mechanics
                     </h4>
-                    <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1.5">
-                      {stepsArr.map((step, i) => (
-                        <li key={i}>{formatInlineBold(step)}</li>
+                    <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
+                      {workingArr.map((w, i) => (
+                        <li key={i}>{formatInlineBold(typeof w === "string" ? w : JSON.stringify(w))}</li>
                       ))}
                     </ol>
                   </div>
                 )}
 
-                {/* Examples */}
-                {examplesArr.length > 0 && (
+                {/* 9. Step-by-Step Procedure */}
+                {stepsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Examples & Code Illustration
+                      9. Step-by-Step Procedure
                     </h4>
-                    <div className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto space-y-1">
-                      {examplesArr.map((ex, i) => (
-                        <div key={i}>{ex}</div>
+                    <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
+                      {stepsArr.map((step, i) => (
+                        <li key={i}>{formatInlineBold(typeof step === "string" ? step : JSON.stringify(step))}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {/* 10 & 11. Examples / Worked Examples */}
+                {examplesArr.length > 0 && (
+                  <div>
+                    <h4 className="text-base font-bold text-orange-600 mb-3 border-b border-orange-100 pb-1">
+                      10. Examples & Illustrations
+                    </h4>
+                    <div className="space-y-3">
+                      {examplesArr.map((ex, i) => {
+                        if (typeof ex === "object" && ex !== null) {
+                          return (
+                            <div key={i} className="p-3.5 bg-gray-50 rounded-lg border border-appBorder text-xs text-gray-800 flex flex-col gap-1">
+                              {ex.word && <div className="font-bold text-orange-700 text-sm">{ex.word}</div>}
+                              {ex.analysis && <div><span className="font-semibold text-gray-700">Analysis:</span> {ex.analysis}</div>}
+                              {ex.type && <div><span className="font-semibold text-gray-700">Category:</span> {ex.type}</div>}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={i} className="p-3 bg-gray-50 rounded-lg border border-appBorder text-xs text-gray-800">
+                            {formatInlineBold(String(ex))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 12. Code Examples */}
+                {codeExamplesArr.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <Code2 className="w-5 h-5 text-orange-600" /> 12. Code Examples
+                    </h4>
+                    {codeExamplesArr.map((codeEx: any, i: number) => (
+                      <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-md">
+                        <div className="bg-gray-800 px-4 py-3 flex items-center justify-between border-b border-gray-700">
+                          <div className="flex items-center gap-2">
+                            <FileCode className="w-4 h-4 text-orange-400" />
+                            <span className="font-bold text-white text-sm">
+                              {codeEx.title || `Code Example ${i + 1}`}
+                            </span>
+                          </div>
+                          {codeEx.language && (
+                            <span className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-0.5 rounded border border-orange-500/30 uppercase font-mono">
+                              {codeEx.language}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="p-4 space-y-3">
+                          {codeEx.purpose && (
+                            <p className="text-xs text-gray-300">
+                              <span className="font-semibold text-orange-400">Purpose:</span> {codeEx.purpose}
+                            </p>
+                          )}
+
+                          {codeEx.code && (
+                            <div className="relative">
+                              <pre className="p-4 bg-gray-950 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
+                                <code>{codeEx.code}</code>
+                              </pre>
+                            </div>
+                          )}
+
+                          {codeEx.explanation && (
+                            <div className="text-xs text-gray-300 pt-1">
+                              <span className="font-semibold text-orange-400">Explanation:</span> {codeEx.explanation}
+                            </div>
+                          )}
+
+                          {(codeEx.expected_output || codeEx.expectedOutput) && (
+                            <div className="pt-2 border-t border-gray-800">
+                              <span className="text-xs font-semibold text-orange-400 block mb-1">
+                                Expected Output:
+                              </span>
+                              <pre className="p-3 bg-gray-950 text-gray-200 rounded text-xs font-mono whitespace-pre border border-gray-800">
+                                <code>{codeEx.expected_output || codeEx.expectedOutput}</code>
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 13. Diagram Instructions */}
+                {diagramsArr.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <PenTool className="w-5 h-5 text-orange-600" /> 13. Diagram / Figure Instructions
+                    </h4>
+                    {diagramsArr.map((diag: any, i: number) => (
+                      <div key={i} className="p-5 bg-orange-50/40 rounded-xl border border-orange-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="font-bold text-darkText text-sm">
+                            {diag.title || `Diagram ${i + 1}`}
+                          </h5>
+                          <span className="text-xs font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
+                            Figure Guide
+                          </span>
+                        </div>
+
+                        {diag.purpose && (
+                          <p className="text-xs text-gray-700">
+                            <span className="font-semibold text-orange-800">Purpose:</span> {diag.purpose}
+                          </p>
+                        )}
+
+                        {(diag.what_to_draw || diag.whatToDraw) && (
+                          <div className="p-3 bg-white rounded border border-orange-200 text-xs text-gray-800">
+                            <span className="font-bold text-orange-700 block mb-1">What to Draw in Answer Book:</span>
+                            {diag.what_to_draw || diag.whatToDraw}
+                          </div>
+                        )}
+
+                        {diag.labels && Array.isArray(diag.labels) && diag.labels.length > 0 && (
+                          <div>
+                            <span className="text-xs font-semibold text-orange-800 block mb-1">Labels to include:</span>
+                            <ul className="list-disc pl-5 text-xs text-gray-700 space-y-0.5">
+                              {diag.labels.map((lbl: string, idx: number) => (
+                                <li key={idx}>{lbl}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {diag.explanation && (
+                          <p className="text-xs text-gray-700 italic border-t border-orange-200/60 pt-2">
+                            {diag.explanation}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 14. Tables */}
+                {tablesArr.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <TableIcon className="w-5 h-5 text-orange-600" /> 14. Comparative Tables
+                    </h4>
+                    {tablesArr.map((tbl: any, i: number) => (
+                      <div key={i} className="space-y-2">
+                        {tbl.title && <h5 className="font-bold text-darkText text-sm">{tbl.title}</h5>}
+                        <div className="overflow-x-auto rounded-lg border border-appBorder">
+                          <table className="w-full text-xs text-left text-gray-800">
+                            {tbl.headers && Array.isArray(tbl.headers) && (
+                              <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
+                                <tr>
+                                  {tbl.headers.map((hdr: string, idx: number) => (
+                                    <th key={idx} className="px-4 py-3">
+                                      {hdr}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                            )}
+                            <tbody>
+                              {tbl.rows && Array.isArray(tbl.rows) && tbl.rows.map((row: any[], rIdx: number) => (
+                                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                                  {Array.isArray(row) && row.map((cell: any, cIdx: number) => (
+                                    <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder">
+                                      {String(cell)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 15. Formulas */}
+                {formulasArr.length > 0 && (
+                  <div>
+                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
+                      15. Mathematical Formulas
+                    </h4>
+                    <div className="space-y-2">
+                      {formulasArr.map((form, i) => (
+                        <div key={i} className="p-3 bg-orange-50/60 rounded-lg border border-orange-100 font-mono text-xs text-orange-950">
+                          {String(form)}
+                        </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Lab Specific Fields */}
-                {labObjectivesArr.length > 0 && (
-                  <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Lab Objectives
-                    </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-                      {labObjectivesArr.map((obj, i) => (
-                        <li key={i}>{obj}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Applications */}
+                {/* 16. Real-World Applications */}
                 {applicationsArr.length > 0 && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Real-World Applications
+                      16. Real-World Applications
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
+                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {applicationsArr.map((app, i) => (
-                        <li key={i}>{formatInlineBold(app)}</li>
+                        <li key={i}>{formatInlineBold(typeof app === "string" ? app : JSON.stringify(app))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Advantages & Limitations */}
+                {/* 17 & 18. Advantages & Limitations */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {advantagesArr.length > 0 && (
-                    <div className="p-4 bg-green-50/60 rounded-lg border border-green-100">
-                      <h5 className="font-bold text-green-800 text-sm mb-2">Advantages</h5>
-                      <ul className="list-disc pl-4 text-xs text-green-900 space-y-1">
+                    <div className="p-4 bg-green-50/60 rounded-xl border border-green-100">
+                      <h5 className="font-bold text-green-900 text-sm mb-2">17. Advantages</h5>
+                      <ul className="list-disc pl-4 text-xs text-green-950 space-y-1">
                         {advantagesArr.map((adv, i) => (
-                          <li key={i}>{formatInlineBold(adv)}</li>
+                          <li key={i}>{formatInlineBold(typeof adv === "string" ? adv : JSON.stringify(adv))}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
                   {limitationsArr.length > 0 && (
-                    <div className="p-4 bg-red-50/60 rounded-lg border border-red-100">
-                      <h5 className="font-bold text-red-800 text-sm mb-2">Limitations</h5>
-                      <ul className="list-disc pl-4 text-xs text-red-900 space-y-1">
+                    <div className="p-4 bg-red-50/60 rounded-xl border border-red-100">
+                      <h5 className="font-bold text-red-900 text-sm mb-2">18. Limitations</h5>
+                      <ul className="list-disc pl-4 text-xs text-red-950 space-y-1">
                         {limitationsArr.map((lim, i) => (
-                          <li key={i}>{formatInlineBold(lim)}</li>
+                          <li key={i}>{formatInlineBold(typeof lim === "string" ? lim : JSON.stringify(lim))}</li>
                         ))}
                       </ul>
                     </div>
                   )}
                 </div>
 
-                {/* Important Exam Points */}
+                {/* 20. Important RGPV Exam Points */}
                 {importantExamPointsArr.length > 0 && (
-                  <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                    <h4 className="text-sm font-bold text-orange-900 mb-2 flex items-center gap-2">
+                  <div className="p-5 bg-orange-50 rounded-xl border border-orange-200">
+                    <h4 className="text-sm font-bold text-orange-950 mb-2 flex items-center gap-2">
                       <HelpCircle className="w-4 h-4 text-orange-600" />
-                      Important RGPV Exam Points
+                      20. Important RGPV Exam Points
                     </h4>
                     <ul className="list-disc pl-5 text-xs text-orange-950 space-y-1 font-medium">
                       {importantExamPointsArr.map((pt, i) => (
-                        <li key={i}>{formatInlineBold(pt)}</li>
+                        <li key={i}>{formatInlineBold(typeof pt === "string" ? pt : JSON.stringify(pt))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Summary */}
+                {/* 21. Probable Examination Questions */}
+                {probableQuestions && (
+                  <div className="p-6 bg-orange-50/80 rounded-xl border border-orange-200 space-y-4">
+                    <div className="border-b border-orange-200 pb-2">
+                      <h4 className="text-lg font-bold text-orange-950 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-orange-600" />
+                        RGPV EXAM PREPARATION
+                      </h4>
+                      <p className="text-xs text-orange-800 italic mt-0.5">
+                        Practice / probable questions based on the generated study material
+                      </p>
+                    </div>
+
+                    {/* Short Answer Questions */}
+                    {(probableQuestions.short_answer || probableQuestions.shortAnswer) && (
+                      <div>
+                        <h5 className="font-bold text-orange-900 text-sm mb-1.5">Short Answer Questions</h5>
+                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
+                          {safeArray(probableQuestions.short_answer || probableQuestions.shortAnswer).map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* Medium Answer Questions */}
+                    {(probableQuestions.medium_answer || probableQuestions.mediumAnswer) && (
+                      <div>
+                        <h5 className="font-bold text-orange-900 text-sm mb-1.5">Medium Answer Questions</h5>
+                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
+                          {safeArray(probableQuestions.medium_answer || probableQuestions.mediumAnswer).map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* 7-Mark Long Answer Questions */}
+                    {(probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks) && (
+                      <div>
+                        <h5 className="font-bold text-orange-900 text-sm mb-1.5">7-Mark / Long Answer Questions</h5>
+                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-semibold">
+                          {safeArray(probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks).map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 22. How to Write a 7-Mark Answer */}
+                {sevenMarkGuide && (
+                  <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 sm:p-7 rounded-2xl shadow-lg space-y-5">
+                    <div className="border-b border-orange-400/60 pb-3 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs uppercase font-bold tracking-wider text-orange-200 bg-orange-700/50 px-2.5 py-0.5 rounded">
+                          RGPV Exam Mastery
+                        </span>
+                        <h3 className="text-xl font-extrabold mt-1">HOW TO WRITE A 7-MARK ANSWER</h3>
+                      </div>
+                      <Sparkles className="w-7 h-7 text-orange-200" />
+                    </div>
+
+                    {/* Purpose */}
+                    {sevenMarkGuide.purpose && (
+                      <p className="text-xs text-orange-50 leading-relaxed font-medium bg-orange-700/30 p-3 rounded-lg border border-orange-400/40">
+                        {sevenMarkGuide.purpose}
+                      </p>
+                    )}
+
+                    {/* Recommended Answer Structure */}
+                    {(sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure) && (
+                      <div>
+                        <h4 className="font-bold text-sm text-orange-100 mb-2 flex items-center gap-1.5">
+                          <Zap className="w-4 h-4 text-orange-200" /> Recommended Answer Structure
+                        </h4>
+                        <ul className="list-disc pl-5 text-xs text-orange-50 space-y-1">
+                          {safeArray(sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure).map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* 3-Page Answer Strategy */}
+                    {(sevenMarkGuide.page_wise_strategy || sevenMarkGuide.pageWiseStrategy) && (
+                      <div>
+                        <h4 className="font-bold text-sm text-orange-100 mb-2.5">3-Page Answer Strategy</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {safeArray(sevenMarkGuide.page_wise_strategy || sevenMarkGuide.pageWiseStrategy).map((pageContent, i) => (
+                            <div key={i} className="bg-white/10 backdrop-blur-sm p-3.5 rounded-xl border border-white/20 text-xs text-orange-50">
+                              <span className="font-extrabold text-orange-200 block mb-1 text-xs uppercase">
+                                Page {i + 1}
+                              </span>
+                              {typeof pageContent === "object" ? pageContent.content || JSON.stringify(pageContent) : String(pageContent)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Important Keywords */}
+                    {(sevenMarkGuide.important_keywords || sevenMarkGuide.importantKeywords) && (
+                      <div>
+                        <h4 className="font-bold text-sm text-orange-100 mb-2">Important Keywords to Include</h4>
+                        <div className="flex flex-wrap gap-1.5">
+                          {safeArray(sevenMarkGuide.important_keywords || sevenMarkGuide.importantKeywords).map((kw, i) => (
+                            <span key={i} className="bg-white text-orange-800 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm">
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Diagram Strategy */}
+                    {(sevenMarkGuide.diagram_strategy || sevenMarkGuide.diagramStrategy) && (
+                      <div className="bg-orange-700/40 p-3.5 rounded-xl border border-orange-400/40 text-xs text-orange-50">
+                        <span className="font-bold text-orange-200 block mb-0.5">Diagram Strategy:</span>
+                        {sevenMarkGuide.diagram_strategy || sevenMarkGuide.diagramStrategy}
+                      </div>
+                    )}
+
+                    {/* Memory Trick */}
+                    {(sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick) && (
+                      <div className="bg-yellow-400 text-yellow-950 p-4 rounded-xl font-bold shadow-sm text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-yellow-900">
+                          <Lightbulb className="w-4 h-4 text-yellow-800" /> MEMORY TRICK
+                        </div>
+                        <div className="text-sm">{sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick}</div>
+                      </div>
+                    )}
+
+                    {/* If You Forget in the Exam */}
+                    {(sevenMarkGuide.if_you_forget || sevenMarkGuide.ifYouForget) && (
+                      <div className="bg-orange-800/60 p-4 rounded-xl border border-orange-400/50 text-xs text-orange-100 space-y-1">
+                        <span className="font-bold text-orange-200 uppercase tracking-wider text-xs block">
+                          IF YOU FORGET IN THE EXAM
+                        </span>
+                        <p>{sevenMarkGuide.if_you_forget || sevenMarkGuide.ifYouForget}</p>
+                      </div>
+                    )}
+
+                    {/* Common Mistakes */}
+                    {(sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes) && (
+                      <div className="bg-red-950/40 p-4 rounded-xl border border-red-400/40 text-xs text-red-100 space-y-1">
+                        <span className="font-bold text-red-200 uppercase tracking-wider text-xs flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-300" /> Common Mistakes to Avoid
+                        </span>
+                        <ul className="list-disc pl-5 space-y-0.5 text-red-100">
+                          {safeArray(sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes).map((m, i) => (
+                            <li key={i}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 30. Summary */}
                 {notes.summary && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      Summary
+                      30. Summary & Takeaways
                     </h4>
-                    <p className="text-sm text-gray-700 italic bg-gray-50 p-3 rounded border border-gray-200">
-                      {notes.summary}
+                    <p className="text-sm text-gray-800 italic bg-gray-50 p-4 rounded-xl border border-gray-200 leading-relaxed">
+                      {formatInlineBold(notes.summary)}
                     </p>
                   </div>
                 )}
@@ -468,31 +860,24 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Infographic */}
             <VisualCard
               title="1. Infographic"
               typeSuffix="Infographic"
               imageUrl={safeImagesObj.infographic}
               onDownload={(url) => downloadImage(url, "Infographic")}
             />
-
-            {/* 2. Diagram */}
             <VisualCard
               title="2. Diagram"
               typeSuffix="Diagram"
               imageUrl={safeImagesObj.diagram}
               onDownload={(url) => downloadImage(url, "Diagram")}
             />
-
-            {/* 3. Table */}
             <VisualCard
               title="3. Table"
               typeSuffix="Table"
               imageUrl={safeImagesObj.table}
               onDownload={(url) => downloadImage(url, "Table")}
             />
-
-            {/* 4. Flowchart */}
             <VisualCard
               title="4. Flowchart"
               typeSuffix="Flowchart"

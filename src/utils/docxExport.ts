@@ -1,37 +1,13 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import { saveAs } from "file-saver";
 
-interface NotesData {
-  title?: string;
-  introduction?: string;
-  definition?: string;
-  keyTerminology?: string[];
-  coreConcepts?: string[];
-  explanation?: string;
-  typesOrClassification?: string[];
-  examples?: string[];
-  steps?: string[];
-  applications?: string[];
-  advantages?: string[];
-  limitations?: string[];
-  importantExamPoints?: string[];
-  summary?: string;
-  labObjectives?: string[];
-  prerequisites?: string[];
-  algorithmCode?: string;
-  labProcedure?: string[];
-  expectedOutput?: string;
-  vivaQuestions?: string[];
-  [key: string]: any;
-}
-
 export async function downloadNotesDocx(params: {
   className: string;
   subject: string;
   unit: string;
   topic: string;
   teachingType: string;
-  notesContent: string | NotesData;
+  notesContent: any;
 }) {
   const { className, subject, unit, topic, teachingType, notesContent } = params;
 
@@ -54,7 +30,7 @@ export async function downloadNotesDocx(params: {
     })
   );
 
-  // Metadata Table / Lines
+  // Metadata Header Lines
   children.push(
     new Paragraph({
       children: [
@@ -114,9 +90,10 @@ export async function downloadNotesDocx(params: {
       }
     });
   } else {
-    // Structured JSON response object
-    const renderSection = (title: string, content?: string | string[]) => {
-      if (!content || (Array.isArray(content) && content.length === 0)) return;
+    const renderSection = (title: string, content?: any) => {
+      if (!content) return;
+      if (Array.isArray(content) && content.length === 0) return;
+
       children.push(
         new Paragraph({
           text: title,
@@ -127,18 +104,79 @@ export async function downloadNotesDocx(params: {
 
       if (Array.isArray(content)) {
         content.forEach((item) => {
+          if (typeof item === "object" && item !== null) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: item.type || item.title || item.word || JSON.stringify(item),
+                    bold: true,
+                  }),
+                ],
+                spacing: { before: 100, after: 40 },
+              })
+            );
+            if (item.description) {
+              children.push(new Paragraph({ text: item.description, spacing: { after: 60 } }));
+            }
+            if (item.explanation) {
+              children.push(new Paragraph({ text: item.explanation, spacing: { after: 60 } }));
+            }
+            if (item.code) {
+              children.push(
+                new Paragraph({
+                  children: [new TextRun({ text: item.code, font: "Courier New" })],
+                  spacing: { after: 60 },
+                })
+              );
+            }
+          } else {
+            children.push(
+              new Paragraph({
+                text: String(item),
+                bullet: { level: 0 },
+                spacing: { after: 60 },
+              })
+            );
+          }
+        });
+      } else if (typeof content === "object") {
+        Object.entries(content).forEach(([k, v]) => {
+          if (!v) return;
           children.push(
             new Paragraph({
-              text: item,
-              bullet: { level: 0 },
-              spacing: { after: 60 },
+              children: [
+                new TextRun({
+                  text: k.replace(/_/g, " ").toUpperCase(),
+                  bold: true,
+                }),
+              ],
+              spacing: { before: 120, after: 40 },
             })
           );
+          if (Array.isArray(v)) {
+            v.forEach((subItem) => {
+              children.push(
+                new Paragraph({
+                  text: String(subItem),
+                  bullet: { level: 0 },
+                  spacing: { after: 40 },
+                })
+              );
+            });
+          } else {
+            children.push(
+              new Paragraph({
+                text: String(v),
+                spacing: { after: 80 },
+              })
+            );
+          }
         });
       } else {
         children.push(
           new Paragraph({
-            text: content,
+            text: String(content),
             spacing: { after: 120 },
           })
         );
@@ -151,18 +189,20 @@ export async function downloadNotesDocx(params: {
     renderSection("Core Concepts", notesContent.coreConcepts);
     renderSection("Detailed Explanation", notesContent.explanation);
     renderSection("Types & Classification", notesContent.typesOrClassification);
+    renderSection("Components", notesContent.components);
+    renderSection("Working Principle", notesContent.working);
     renderSection("Step-by-Step Procedure", notesContent.steps);
     renderSection("Examples & Code Illustration", notesContent.examples);
-    renderSection("Lab Objectives", notesContent.labObjectives);
-    renderSection("Prerequisites", notesContent.prerequisites);
-    renderSection("Lab Procedure", notesContent.labProcedure);
-    renderSection("Algorithm / Code Snippet", notesContent.algorithmCode);
-    renderSection("Expected Output", notesContent.expectedOutput);
+    renderSection("Code Examples", notesContent.codeExamples);
+    renderSection("Diagram Instructions", notesContent.diagrams);
+    renderSection("Comparative Tables", notesContent.tables);
+    renderSection("Formulas", notesContent.formulas);
     renderSection("Practical Applications", notesContent.applications);
     renderSection("Advantages", notesContent.advantages);
     renderSection("Limitations", notesContent.limitations);
     renderSection("Important RGPV Exam Points", notesContent.importantExamPoints);
-    renderSection("Viva Voice Questions", notesContent.vivaQuestions);
+    renderSection("Probable Examination Questions", notesContent.probableExamQuestions);
+    renderSection("How to Write a 7-Mark Answer", notesContent.sevenMarkAnswerGuide);
     renderSection("Summary", notesContent.summary);
   }
 

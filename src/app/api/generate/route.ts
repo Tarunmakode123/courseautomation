@@ -4,7 +4,9 @@ import { NextResponse } from "next/server";
 function ensureArray(val: any): string[] {
   if (!val) return [];
   if (Array.isArray(val)) {
-    return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)));
+    return val
+      .map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)))
+      .filter(Boolean);
   }
   if (typeof val === "string") {
     const lines = val
@@ -16,7 +18,7 @@ function ensureArray(val: any): string[] {
   return [String(val)];
 }
 
-// Helper to normalize notes object keys safely
+// Helper to normalize notes object keys safely while preserving rich objects
 function normalizeNotesObject(obj: any): any {
   if (!obj || typeof obj !== "object") return obj;
 
@@ -31,19 +33,38 @@ function normalizeNotesObject(obj: any): any {
 
   return {
     title: titleStr,
+    class: source.class || "",
+    subject: source.subject || "",
+    type: source.type || "",
+    unit: source.unit || "",
+    topic: source.topic || "",
+
+    // Core Text Sections
     introduction: introStr,
     definition: defStr,
+    explanation: expStr,
+    summary: sumStr,
+
+    // String List Sections
     keyTerminology: ensureArray(source.key_terminology || source.keyTerminology || source.terminology),
     coreConcepts: ensureArray(source.core_concepts || source.coreConcepts || source.concepts),
-    explanation: expStr,
-    typesOrClassification: ensureArray(source.types_or_classification || source.typesOrClassification || source.types || source.classifications),
+    components: ensureArray(source.components),
+    working: ensureArray(source.working || source.working_principle || source.workingPrinciple),
     steps: ensureArray(source.steps || source.procedure),
-    examples: ensureArray(source.examples || source.code_examples),
+    formulas: source.formulas || [],
     applications: ensureArray(source.applications || source.uses),
     advantages: ensureArray(source.advantages || source.benefits),
     limitations: ensureArray(source.limitations || source.disadvantages),
-    importantExamPoints: ensureArray(source.important_exam_points || source.importantExamPoints || source.exam_points),
-    summary: sumStr,
+    importantExamPoints: ensureArray(source.exam_points || source.important_exam_points || source.importantExamPoints),
+
+    // Rich Objects & Structured Arrays (Preserved intact!)
+    typesOrClassification: source.types_or_classification || source.typesOrClassification || source.types || [],
+    examples: source.examples || [],
+    codeExamples: source.code_examples || source.codeExamples || [],
+    diagrams: source.diagrams || [],
+    tables: source.tables || [],
+    probableExamQuestions: source.probable_exam_questions || source.probableExamQuestions || null,
+    sevenMarkAnswerGuide: source.seven_mark_answer_guide || source.sevenMarkAnswerGuide || null,
   };
 }
 
@@ -72,7 +93,7 @@ function parseNotes(notesObj: any): any {
     rawString = notesObj;
   }
 
-  // Case 2: Gemini API / n8n structure { generated: true, content: { role: 'model', parts: [ { text: '...' } ] } }
+  // Case 2: Gemini API / n8n structure { generated: true, content: { ... } }
   else if (notesObj.content) {
     if (typeof notesObj.content === "string") {
       rawString = notesObj.content;
@@ -215,69 +236,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Default structured mock response if webhook URL is not set or placeholder
-    const mockNotes = {
-      title: `${body.subject} — ${body.unit}: ${body.topic}`,
-      introduction: `This comprehensive material covers ${body.topic} under ${body.unit} of the ${body.subject} course (RGPV AIML syllabus). It provides clear theoretical foundations, step-by-step concepts, exam-focused points, and practical insights.`,
-      definition: `${body.topic} is a fundamental concept in ${body.subject} designed to process, analyze, and transform data models efficiently in Artificial Intelligence and Machine Learning applications.`,
-      keyTerminology: [
-        `Syntax Pattern: Standard sequence representing target grammar rule`,
-        `State Machine: Transition model evaluating boundary conditions`,
-      ],
-      coreConcepts: [
-        `Fundamental Architecture of ${body.topic}`,
-        `Mathematical Formulation & Algorithmic Steps`,
-        `Optimization and Hyperparameter Tuning`,
-        `Integration within Modern ${body.subject} Pipelines`,
-      ],
-      explanation: `In RGPV academic curriculum, ${body.topic} is analyzed through both structural mechanics and algorithmic performance. Students are expected to understand the underlying mathematical transformations, boundary conditions, and real-world trade-offs.`,
-      typesOrClassification: [
-        `Deterministic Model: Predictable single-path transition`,
-        `Non-Deterministic Model: Multi-path transition space`,
-      ],
-      steps: [
-        `Step 1: Input Data Preprocessing & Sanitization`,
-        `Step 2: Feature Matrix Extraction & Dimensionality Setup`,
-        `Step 3: Core Algorithmic Computation (${body.topic} execution)`,
-        `Step 4: Post-processing, Validation & Metrics Evaluation`,
-      ],
-      examples: [
-        `# RGPV Sample Code snippet for ${body.topic}\nimport numpy as np\n\ndef execute_${body.topic.toLowerCase().replace(/[^a-z]/g, "")}(input_data):\n    # Initialize weights and transformations\n    transformed = np.array(input_data) * 1.5\n    return transformed\n\nresult = execute_${body.topic.toLowerCase().replace(/[^a-z]/g, "")}([1.0, 2.5, 3.8])\nprint("Output:", result)`,
-      ],
-      applications: [
-        `Automated Industry Pipelines`,
-        `Large-scale Pattern Recognition Systems`,
-        `Real-time Predictive Analytics in Enterprise AI`,
-      ],
-      advantages: [
-        `High computational efficiency and scalability`,
-        `Robust handling of high-dimensional feature spaces`,
-        `Direct compliance with standard RGPV evaluation frameworks`,
-      ],
-      limitations: [
-        `Requires careful hyperparameter initialization`,
-        `Sensitivity to noisy or unnormalized input data`,
-      ],
-      importantExamPoints: [
-        `Define ${body.topic} and draw its complete structural block diagram (7 Marks RGPV Question).`,
-        `Explain the step-by-step working principle with a numerical example.`,
-        `Differentiate between traditional approaches and modern ${body.subject} implementation of ${body.topic}.`,
-      ],
-      summary: `${body.topic} is a core building block in ${body.subject}. Mastery of its principles is essential for both semester examinations and practical lab implementations.`,
-    };
-
-    const mockImages = {
-      infographic: `https://placehold.co/800x600/FFF7ED/EA580C?text=Infographic:+${encodeURIComponent(body.topic)}`,
-      diagram: `https://placehold.co/800x600/FFFFFF/1F2937?text=Architecture+Diagram:+${encodeURIComponent(body.topic)}`,
-      table: `https://placehold.co/800x600/FFF7ED/1F2937?text=Comparison+Table:+${encodeURIComponent(body.topic)}`,
-      flowchart: `https://placehold.co/800x600/FFFFFF/EA580C?text=Flowchart:+${encodeURIComponent(body.topic)}`,
-    };
-
+    // Fallback response if n8n webhook URL is not set or placeholder
     return NextResponse.json({
       success: true,
       data: {
-        notes: body.generate?.notes ? mockNotes : null,
-        images: body.generate?.images ? mockImages : null,
+        notes: null,
+        images: null,
       },
     });
   } catch (error: any) {
