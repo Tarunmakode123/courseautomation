@@ -35,6 +35,96 @@ interface ResultDisplayProps {
   onReset: () => void;
 }
 
+// Simple helper component to render Markdown text cleanly
+const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
+  const paragraphs = content.split("\n\n");
+
+  return (
+    <div className="space-y-4 text-darkText leading-relaxed">
+      {paragraphs.map((p, idx) => {
+        const trimmed = p.trim();
+        if (!trimmed) return null;
+
+        // Headings
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h4 key={idx} className="text-base font-bold text-orange-600 mt-4 mb-2">
+              {trimmed.replace(/^###\s*/, "")}
+            </h4>
+          );
+        }
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h3 key={idx} className="text-lg font-bold text-darkText border-b border-orange-100 pb-1.5 mt-5 mb-3 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-orange-500" />
+              {trimmed.replace(/^##\s*/, "")}
+            </h3>
+          );
+        }
+        if (trimmed.startsWith("# ")) {
+          return (
+            <h2 key={idx} className="text-xl font-bold text-orange-600 border-b border-orange-200 pb-2 mt-6 mb-3">
+              {trimmed.replace(/^#\s*/, "")}
+            </h2>
+          );
+        }
+
+        // Bullet lists
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          const items = trimmed.split("\n").map((line) => line.replace(/^[-*]\s*/, ""));
+          return (
+            <ul key={idx} className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
+              {items.map((item, i) => (
+                <li key={i}>{formatInlineBold(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        // Numbered lists
+        if (/^\d+\.\s/.test(trimmed)) {
+          const items = trimmed.split("\n").map((line) => line.replace(/^\d+\.\s*/, ""));
+          return (
+            <ol key={idx} className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
+              {items.map((item, i) => (
+                <li key={i}>{formatInlineBold(item)}</li>
+              ))}
+            </ol>
+          );
+        }
+
+        // Code block
+        if (trimmed.startsWith("```")) {
+          const codeText = trimmed.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "");
+          return (
+            <pre key={idx} className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto my-3">
+              <code>{codeText}</code>
+            </pre>
+          );
+        }
+
+        // Normal paragraph
+        return (
+          <p key={idx} className="text-sm text-gray-800">
+            {formatInlineBold(trimmed)}
+          </p>
+        );
+      })}
+    </div>
+  );
+};
+
+// Helper for inline **bold** text
+function formatInlineBold(text: string) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold text-darkText">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) => {
   const { notes, images, requestInfo } = data;
   const { className, subject, teachingType, unit, topic } = requestInfo;
@@ -143,9 +233,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
 
           <div className="p-6 sm:p-8 space-y-6 text-darkText leading-relaxed">
             {typeof notes === "string" ? (
-              <div className="whitespace-pre-wrap font-sans text-sm space-y-3">
-                {notes}
-              </div>
+              <MarkdownText content={notes} />
             ) : (
               <>
                 {/* Introduction */}

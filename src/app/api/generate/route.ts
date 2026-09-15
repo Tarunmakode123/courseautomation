@@ -1,5 +1,71 @@
 import { NextResponse } from "next/server";
 
+// Helper to normalize notes from n8n response (Gemini structure, plain text, or structured object)
+function parseNotes(notesObj: any): any {
+  if (!notesObj) return null;
+
+  // Case 1: Plain string
+  if (typeof notesObj === "string") return notesObj;
+
+  // Case 2: Gemini API / n8n structure { generated: true, content: { role: 'model', parts: [ { text: '...' } ] } }
+  if (notesObj.content) {
+    if (typeof notesObj.content === "string") return notesObj.content;
+    if (notesObj.content.parts && Array.isArray(notesObj.content.parts)) {
+      const partsText = notesObj.content.parts
+        .map((p: any) => (typeof p === "string" ? p : p.text || ""))
+        .filter(Boolean)
+        .join("\n\n");
+      if (partsText) return partsText;
+    }
+    if (notesObj.content.text) return notesObj.content.text;
+  }
+
+  // Case 3: { text: "..." } or { markdown: "..." } or { raw: "..." }
+  if (notesObj.text && typeof notesObj.text === "string") return notesObj.text;
+  if (notesObj.markdown && typeof notesObj.markdown === "string") return notesObj.markdown;
+
+  // Case 4: Structured object with section fields (introduction, definition, etc.)
+  if (
+    notesObj.introduction ||
+    notesObj.definition ||
+    notesObj.coreConcepts ||
+    notesObj.explanation ||
+    notesObj.steps
+  ) {
+    return notesObj;
+  }
+
+  // Case 5: If generated is false
+  if (notesObj.generated === false) return null;
+
+  return notesObj;
+}
+
+// Helper to normalize images from n8n response
+function parseImages(imagesObj: any): any {
+  if (!imagesObj) return null;
+  if (imagesObj.generated === false) return null;
+
+  const result: any = {};
+  if (imagesObj.infographic) result.infographic = imagesObj.infographic;
+  if (imagesObj.diagram) result.diagram = imagesObj.diagram;
+  if (imagesObj.table) result.table = imagesObj.table;
+  if (imagesObj.flowchart) result.flowchart = imagesObj.flowchart;
+
+  if (Object.keys(result).length > 0) return result;
+
+  if (Array.isArray(imagesObj) && imagesObj.length > 0) {
+    return {
+      infographic: imagesObj[0] || null,
+      diagram: imagesObj[1] || null,
+      table: imagesObj[2] || null,
+      flowchart: imagesObj[3] || null,
+    };
+  }
+
+  return imagesObj;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -33,8 +99,14 @@ export async function POST(request: Request) {
         });
 
         if (response.ok) {
-          const n8nData = await response.json();
-          if (n8nData.success === false) {
+          let rawData = await response.json();
+          
+          // Handle n8n response array e.g. [{ success: true, notes: ... }]
+          if (Array.isArray(rawData) && rawData.length > 0) {
+            rawData = rawData[0];
+          }
+
+          if (rawData.success === false) {
             return NextResponse.json(
               {
                 success: false,
@@ -43,7 +115,19 @@ export async function POST(request: Request) {
               { status: 500 }
             );
           }
-          return NextResponse.json({ success: true, data: n8nData });
+
+          // Normalize notes & images
+          const parsedNotes = parseNotes(rawData.notes || rawData.output?.notes || rawData.data?.notes);
+          const parsedImages = parseImages(rawData.images || rawData.output?.images || rawData.data?.images);
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              notes: parsedNotes,
+              images: parsedImages,
+              raw: rawData,
+            },
+          });
         }
       } catch (networkErr) {
         console.error("n8n Webhook connection error:", networkErr);
