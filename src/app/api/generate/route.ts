@@ -46,20 +46,20 @@ function normalizeNotesObject(obj: any): any {
     summary: sumStr,
 
     // String List Sections
-    keyTerminology: ensureArray(source.key_terminology || source.keyTerminology || source.terminology),
-    coreConcepts: ensureArray(source.core_concepts || source.coreConcepts || source.concepts),
-    components: ensureArray(source.components),
-    working: ensureArray(source.working || source.working_principle || source.workingPrinciple),
-    steps: ensureArray(source.steps || source.procedure),
+    keyTerminology: source.key_terminology || source.keyTerminology || source.terminology || [],
+    coreConcepts: source.core_concepts || source.coreConcepts || source.concepts || [],
+    components: source.components || [],
+    working: source.working || source.working_principle || source.workingPrinciple || [],
+    steps: source.steps || source.procedure || [],
     formulas: source.formulas || [],
-    applications: ensureArray(source.applications || source.uses),
-    advantages: ensureArray(source.advantages || source.benefits),
-    limitations: ensureArray(source.limitations || source.disadvantages),
-    importantExamPoints: ensureArray(source.exam_points || source.important_exam_points || source.importantExamPoints),
+    applications: source.applications || source.uses || [],
+    advantages: source.advantages || source.benefits || [],
+    limitations: source.limitations || source.disadvantages || [],
+    importantExamPoints: source.exam_points || source.important_exam_points || source.importantExamPoints || [],
 
     // Rich Objects & Structured Arrays (Preserved intact!)
     typesOrClassification: source.types_or_classification || source.typesOrClassification || source.types || [],
-    examples: source.examples || [],
+    examples: source.examples || source.worked_examples || source.workedExamples || [],
     codeExamples: source.code_examples || source.codeExamples || [],
     diagrams: source.diagrams || [],
     tables: source.tables || [],
@@ -212,15 +212,18 @@ export async function POST(request: Request) {
             );
           }
 
-          // Normalize notes & images
+          // Normalize notes, verification & images
           const parsedNotes = parseNotes(rawData.notes || rawData.output?.notes || rawData.data?.notes);
+          const parsedVerification = rawData.verification || rawData.data?.verification || rawData.notes?.verification || null;
           const parsedImages = parseImages(rawData.images || rawData.output?.images || rawData.data?.images);
 
           return NextResponse.json({
             success: true,
             data: {
               notes: parsedNotes,
+              verification: parsedVerification,
               images: parsedImages,
+              raw: rawData,
             },
           });
         }
@@ -241,6 +244,7 @@ export async function POST(request: Request) {
       success: true,
       data: {
         notes: null,
+        verification: null,
         images: null,
       },
     });

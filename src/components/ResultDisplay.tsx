@@ -23,10 +23,18 @@ import {
   FileCode,
   Sparkles,
   Zap,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  ExternalLink,
+  Check,
+  XCircle,
+  Info,
 } from "lucide-react";
 
 export interface GeneratedResultData {
   notes?: any;
+  verification?: any;
   images?: {
     infographic?: string;
     diagram?: string;
@@ -47,6 +55,45 @@ interface ResultDisplayProps {
   onReset: () => void;
 }
 
+// Clean malformed SVG artifacts without removing legitimate academic "SVG" words
+function cleanSvgArtifacts(str: any): string {
+  if (typeof str !== "string") return String(str || "");
+  return str
+    .replace(/\bsvg(?=[A-Z0-9])/g, "") // removes "svg" when glued to capitalized word e.g. svgType, svgHMM, svgMEMORY
+    .replace(/^\s*svg\s*$/gi, "") // removes standalone "svg" line
+    .replace(/svg(?=(1\.|2\.|3\.|Introduction|Definition|MEMORY|Common))/gi, "")
+    .trim();
+}
+
+// Helper to strip leading numbers or bullets (e.g., "1. ", "1) ", "- ", "* ")
+function cleanListItem(text: any): string {
+  if (typeof text !== "string") return cleanSvgArtifacts(text);
+  const cleaned = text.replace(/^(\d+[\.\)]|step\s*\d+:?|[-*•])\s*/i, "").trim();
+  return cleanSvgArtifacts(cleaned);
+}
+
+// Helper to parse keywords into clean individual pill badges
+function parseKeywords(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.flatMap((v) => parseKeywords(v));
+  }
+  if (typeof val === "string") {
+    const cleanStr = cleanSvgArtifacts(val);
+    if (cleanStr.includes(",")) {
+      return cleanStr.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    if (cleanStr.includes("\n")) {
+      return cleanStr.split("\n").map((s) => s.trim()).filter(Boolean);
+    }
+    if (/[a-z][A-Z]/.test(cleanStr)) {
+      return cleanStr.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").map((s) => s.trim()).filter(Boolean);
+    }
+    return [cleanStr.trim()];
+  }
+  return [cleanSvgArtifacts(val)];
+}
+
 // Safe Array Helper
 function safeArray(val: any): any[] {
   if (!val) return [];
@@ -55,37 +102,11 @@ function safeArray(val: any): any[] {
   return [];
 }
 
-// Helper to strip leading numbers or bullets (e.g., "1. ", "1) ", "- ", "* ")
-function cleanListItem(text: any): string {
-  if (typeof text !== "string") return String(text || "");
-  return text.replace(/^(\d+[\.\)]|step\s*\d+:?|[-*•])\s*/i, "").trim();
-}
-
-// Helper to parse keywords into clean individual pills
-function parseKeywords(val: any): string[] {
-  if (!val) return [];
-  if (Array.isArray(val)) {
-    return val.flatMap((v) => parseKeywords(v));
-  }
-  if (typeof val === "string") {
-    if (val.includes(",")) {
-      return val.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-    if (val.includes("\n")) {
-      return val.split("\n").map((s) => s.trim()).filter(Boolean);
-    }
-    if (/[a-z][A-Z]/.test(val)) {
-      return val.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").map((s) => s.trim()).filter(Boolean);
-    }
-    return [val.trim()];
-  }
-  return [String(val)];
-}
-
 // Helper for inline **bold** text
 function formatInlineBold(text: string) {
   if (typeof text !== "string") return String(text || "");
-  const parts = text.split(/(\*\*.*?\*\*)/g);
+  const clean = cleanSvgArtifacts(text);
+  const parts = clean.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i} className="font-semibold text-darkText">{part.slice(2, -2)}</strong>;
@@ -100,7 +121,6 @@ function renderMarkdownTable(tableString: string) {
   if (lines.length < 2) return null;
 
   const dataLines = lines.filter((line) => !/^\|?\s*:?-+:?\s*(\|?\s*:?-+:?\s*)+\|?$/.test(line));
-
   if (dataLines.length === 0) return null;
 
   const parseRow = (rowStr: string) => {
@@ -117,7 +137,7 @@ function renderMarkdownTable(tableString: string) {
           <tr>
             {headers.map((h, idx) => (
               <th key={idx} className="px-4 py-3 border-r border-orange-200/60 last:border-r-0">
-                {h}
+                {cleanSvgArtifacts(h)}
               </th>
             ))}
           </tr>
@@ -138,6 +158,186 @@ function renderMarkdownTable(tableString: string) {
   );
 }
 
+// Type-Aware Smart Renderer for ANY nested value (NEVER outputs [object Object])
+const RenderSmartContent: React.FC<{ value: any }> = ({ value }) => {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === "string") {
+    const cleanStr = cleanSvgArtifacts(value);
+    if (cleanStr.includes("|") && cleanStr.includes("\n")) {
+      const parsedTable = renderMarkdownTable(cleanStr);
+      if (parsedTable) return parsedTable;
+    }
+    return <span className="whitespace-pre-wrap">{formatInlineBold(cleanStr)}</span>;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return <span>{String(value)}</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    const isStringArray = value.every((v) => typeof v === "string" || typeof v === "number");
+
+    if (isStringArray) {
+      return (
+        <ul className="list-disc pl-5 text-xs text-gray-800 space-y-1">
+          {value.map((item, idx) => (
+            <li key={idx}>{formatInlineBold(cleanListItem(String(item)))}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    return (
+      <div className="space-y-3 my-2">
+        {value.map((item, idx) => (
+          <RenderObjectCard key={idx} obj={item} defaultTitle={`Item ${idx + 1}`} />
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    return <RenderObjectCard obj={value} />;
+  }
+
+  return null;
+};
+
+// Generic Object Card Component that dynamically renders ANY object without dropping fields or outputting [object Object]
+const RenderObjectCard: React.FC<{ obj: Record<string, any>; defaultTitle?: string }> = ({ obj, defaultTitle }) => {
+  if (typeof obj !== "object" || obj === null) {
+    return (
+      <div className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-xs text-gray-800">
+        {formatInlineBold(cleanListItem(String(obj)))}
+      </div>
+    );
+  }
+
+  const labelMap: Record<string, string> = {
+    title: "Title",
+    word: "Word / Term",
+    name: "Name",
+    problem: "Problem / Question",
+    question: "Question",
+    input: "Input",
+    analysis: "Analysis / Breakdown",
+    explanation: "Explanation",
+    description: "Description",
+    result: "Result / Answer",
+    answer: "Answer",
+    output: "Expected Output",
+    type: "Category / Type",
+    category: "Category",
+    code: "Code Snippet",
+    purpose: "Purpose",
+    what_to_draw: "What to Draw in Answer Book",
+    whatToDraw: "What to Draw in Answer Book",
+    labels: "Labels to Include",
+    headers: "Headers",
+    rows: "Rows",
+    claim: "Claim",
+    evidence: "Evidence",
+    correction: "Correction",
+    location: "Location",
+    severity: "Severity",
+    formula: "Formula",
+    calculation: "Calculation",
+  };
+
+  const title = obj.title || obj.name || obj.word || defaultTitle;
+  const titleKeys = ["title", "name", "word"];
+
+  const entries = Object.entries(obj).filter(([k, v]) => !titleKeys.includes(k) && v !== null && v !== undefined && v !== "");
+
+  // Special handling for Table Object { headers, rows }
+  if (obj.headers && Array.isArray(obj.headers) && obj.rows && Array.isArray(obj.rows)) {
+    return (
+      <div className="space-y-2 my-2">
+        {title && <h5 className="font-bold text-darkText text-xs">{cleanSvgArtifacts(title)}</h5>}
+        <div className="overflow-x-auto rounded-xl border border-appBorder shadow-sm">
+          <table className="w-full text-xs text-left text-gray-800">
+            <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
+              <tr>
+                {obj.headers.map((hdr: any, idx: number) => (
+                  <th key={idx} className="px-4 py-3 border-r border-orange-200/60 last:border-r-0">
+                    {cleanSvgArtifacts(String(hdr))}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {obj.rows.map((row: any[], rIdx: number) => (
+                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                  {Array.isArray(row) && row.map((cell: any, cIdx: number) => (
+                    <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder border-r border-appBorder last:border-r-0">
+                      {formatInlineBold(String(cell))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-gray-50/90 rounded-xl border border-appBorder shadow-sm space-y-2.5">
+      {title && (
+        <div className="font-bold text-orange-700 text-xs border-b border-orange-100 pb-1.5 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+          <span>{cleanSvgArtifacts(title)}</span>
+        </div>
+      )}
+
+      {entries.map(([key, value]) => {
+        const label = labelMap[key] || key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (l) => l.toUpperCase());
+
+        if (key === "code" || key === "code_snippet") {
+          return (
+            <div key={key} className="space-y-1">
+              <span className="font-bold text-gray-700 text-xs block">{label}:</span>
+              <pre className="p-3 bg-gray-900 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
+                <code>{String(value)}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        // Render URL if source_url key
+        if (key === "source_url" && typeof value === "string") {
+          return (
+            <div key={key} className="text-xs text-gray-800">
+              <span className="font-bold text-gray-700 mr-1.5">Source URL:</span>
+              <a
+                href={value}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-600 underline font-medium hover:text-orange-700 inline-flex items-center gap-1"
+              >
+                <span>{value}</span>
+                <ExternalLink className="w-3 h-3 inline" />
+              </a>
+            </div>
+          );
+        }
+
+        return (
+          <div key={key} className="text-xs text-gray-800 space-y-0.5">
+            <span className="font-bold text-gray-700 block">{label}:</span>
+            <div className="pl-2 border-l-2 border-orange-300">
+              <RenderSmartContent value={value} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // Markdown text renderer
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   const paragraphs = (content || "").split("\n\n");
@@ -148,7 +348,6 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         const trimmed = p.trim();
         if (!trimmed) return null;
 
-        // Check if paragraph is a markdown table
         if (trimmed.includes("|") && trimmed.includes("\n")) {
           const tableElem = renderMarkdownTable(trimmed);
           if (tableElem) return <React.Fragment key={idx}>{tableElem}</React.Fragment>;
@@ -157,22 +356,24 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         if (trimmed.startsWith("### ")) {
           return (
             <h4 key={idx} className="text-base font-bold text-orange-600 mt-4 mb-2">
-              {trimmed.replace(/^###\s*/, "")}
+              {cleanSvgArtifacts(trimmed.replace(/^###\s*/, ""))}
             </h4>
           );
         }
         if (trimmed.startsWith("## ")) {
           return (
-            <h3 key={idx} className="text-lg font-bold text-darkText border-b border-orange-100 pb-1.5 mt-5 mb-3 flex items-center gap-2">
+            <div key={idx} className="flex items-center gap-2 border-b border-orange-100 pb-1.5 mt-5 mb-3">
               <BookOpen className="w-5 h-5 text-orange-500" />
-              <span>{trimmed.replace(/^##\s*/, "")}</span>
-            </h3>
+              <h3 className="text-lg font-bold text-darkText">
+                {cleanSvgArtifacts(trimmed.replace(/^##\s*/, ""))}
+              </h3>
+            </div>
           );
         }
         if (trimmed.startsWith("# ")) {
           return (
             <h2 key={idx} className="text-xl font-bold text-orange-600 border-b border-orange-200 pb-2 mt-6 mb-3">
-              {trimmed.replace(/^#\s*/, "")}
+              {cleanSvgArtifacts(trimmed.replace(/^#\s*/, ""))}
             </h2>
           );
         }
@@ -218,91 +419,309 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-// Generic Object Card Component that dynamically renders ANY object without dropping fields
-const RenderObjectCard: React.FC<{ obj: Record<string, any>; defaultTitle?: string }> = ({ obj, defaultTitle }) => {
-  if (typeof obj !== "object" || obj === null) {
+// Verification Panel Component
+const VerificationDisplay: React.FC<{ verification: any }> = ({ verification }) => {
+  if (!verification || typeof verification !== "object") {
     return (
-      <div className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-sm text-gray-800">
-        {formatInlineBold(cleanListItem(String(obj)))}
+      <div className="bg-white rounded-xl border border-appBorder p-5 text-center text-xs text-secondaryText shadow-sm">
+        <Info className="w-5 h-5 text-gray-400 mx-auto mb-1.5" />
+        <p className="font-medium">Verification information is not available for this material.</p>
       </div>
     );
   }
 
-  const labelMap: Record<string, string> = {
-    title: "Title",
-    word: "Word / Term",
-    name: "Name",
-    problem: "Problem / Question",
-    question: "Question",
-    input: "Input",
-    analysis: "Analysis / Breakdown",
-    explanation: "Explanation",
-    description: "Description",
-    result: "Result / Answer",
-    answer: "Answer",
-    output: "Expected Output",
-    type: "Category / Type",
-    category: "Category",
-    code: "Code Snippet",
-    purpose: "Purpose",
+  const statusRaw = String(verification.verification_status || verification.status || "verified").toLowerCase();
+
+  let statusBadge = {
+    label: "Verified",
+    bg: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    icon: <ShieldCheck className="w-4 h-4 text-emerald-600" />,
   };
 
-  const title = obj.title || obj.name || obj.word || defaultTitle;
-  const titleKeys = ["title", "name", "word"];
+  if (statusRaw.includes("warning")) {
+    statusBadge = {
+      label: "Verified with Warnings",
+      bg: "bg-amber-50 text-amber-800 border-amber-200",
+      icon: <ShieldAlert className="w-4 h-4 text-amber-600" />,
+    };
+  } else if (statusRaw.includes("correction") || statusRaw.includes("fail") || statusRaw.includes("error")) {
+    statusBadge = {
+      label: "Needs Correction",
+      bg: "bg-red-50 text-red-800 border-red-200",
+      icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
+    };
+  }
 
-  const entries = Object.entries(obj).filter(([k, v]) => !titleKeys.includes(k) && v !== null && v !== undefined && v !== "");
+  const confidenceVal = typeof verification.confidence === "number"
+    ? Math.round(verification.confidence > 1 ? verification.confidence : verification.confidence * 100)
+    : 95;
+
+  const issuesFound = safeArray(verification.issues_found || verification.issues);
+  const factualChecks = safeArray(verification.factual_verification);
+  const mathChecks = verification.mathematical_verification || null;
+  const formulaChecks = safeArray(mathChecks?.formula_checks);
+  const numericalChecks = safeArray(mathChecks?.numerical_checks);
+  const codeVerification = verification.code_verification || null;
+  const codeChecks = safeArray(codeVerification?.checks);
+  const internalConsistency = verification.internal_consistency || null;
+  const sourcesChecked = safeArray(verification.sources);
 
   return (
-    <div className="p-4 bg-gray-50/90 rounded-xl border border-appBorder shadow-sm space-y-3">
-      {title && (
-        <div className="font-bold text-orange-700 text-sm border-b border-orange-100 pb-2 flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-orange-500" />
-          <span>{title}</span>
+    <div className="bg-white rounded-xl border border-appBorder p-6 shadow-sm space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-appBorder pb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-darkText flex items-center gap-2">
+              Academic Content Verification
+            </h3>
+            <p className="text-xs text-secondaryText">Cross-verified syllabus & source check</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:items-end gap-1">
+          <div className={`px-3 py-1.5 rounded-lg border font-bold text-xs flex items-center gap-2 ${statusBadge.bg}`}>
+            {statusBadge.icon}
+            <span>{statusBadge.label}</span>
+          </div>
+          <span className="text-xs font-semibold text-gray-700">
+            Verification confidence: {confidenceVal}%
+          </span>
+        </div>
+      </div>
+
+      <p className="text-xs text-gray-500 italic">
+        * Confidence reflects the verification assessment and is not a percentage guarantee of correctness.
+      </p>
+
+      {/* Summary */}
+      {verification.overall_verification_summary && (
+        <div className="p-3.5 bg-orange-50/50 rounded-xl border border-orange-100 text-xs text-gray-800 leading-relaxed">
+          <span className="font-bold text-orange-900 block mb-1">Overall Summary:</span>
+          {cleanSvgArtifacts(verification.overall_verification_summary)}
         </div>
       )}
 
-      {entries.map(([key, value]) => {
-        const label = labelMap[key] || key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (l) => l.toUpperCase());
-
-        if (key === "code" || key === "code_snippet") {
-          return (
-            <div key={key} className="space-y-1">
-              <span className="font-bold text-gray-700 text-xs block">{label}:</span>
-              <pre className="p-3 bg-gray-900 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
-                <code>{String(value)}</code>
-              </pre>
-            </div>
-          );
-        }
-
-        if (Array.isArray(value)) {
-          return (
-            <div key={key} className="space-y-1">
-              <span className="font-bold text-gray-700 text-xs block">{label}:</span>
-              <ul className="list-disc pl-5 text-xs text-gray-800 space-y-1">
-                {value.map((item, i) => (
-                  <li key={i}>{formatInlineBold(cleanListItem(String(item)))}</li>
-                ))}
-              </ul>
-            </div>
-          );
-        }
-
-        return (
-          <div key={key} className="text-xs text-gray-800 space-y-1">
-            <span className="font-bold text-gray-700 block">{label}:</span>
-            <div className="pl-2.5 border-l-2 border-orange-300 whitespace-pre-wrap font-sans leading-relaxed">
-              {formatInlineBold(String(value))}
-            </div>
+      {/* Issues Found */}
+      {issuesFound.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold text-darkText uppercase tracking-wider flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-orange-600" />
+            <span>Issues & Flagged Items ({issuesFound.length})</span>
+          </h4>
+          <div className="space-y-2.5">
+            {issuesFound.map((issue: any, idx: number) => {
+              if (typeof issue === "string") {
+                return (
+                  <div key={idx} className="p-3 bg-red-50/60 rounded-lg border border-red-100 text-xs text-red-900">
+                    {cleanSvgArtifacts(issue)}
+                  </div>
+                );
+              }
+              const sourceTitle = issue.source_title || issue.source || "Reference Source";
+              return (
+                <div key={idx} className="p-3.5 bg-orange-50/40 rounded-xl border border-orange-200 text-xs text-gray-800 space-y-1.5">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-orange-900">{issue.location || `Issue ${idx + 1}`}</span>
+                    {issue.severity && (
+                      <span className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-[10px] uppercase font-mono">
+                        {issue.severity}
+                      </span>
+                    )}
+                  </div>
+                  {issue.problem && <p><span className="font-semibold text-gray-700">Problem:</span> {issue.problem}</p>}
+                  {issue.description && <p><span className="font-semibold text-gray-700">Description:</span> {issue.description}</p>}
+                  {issue.explanation && <p><span className="font-semibold text-gray-700">Explanation:</span> {issue.explanation}</p>}
+                  {issue.correction && <p><span className="font-semibold text-emerald-800">Correction:</span> {issue.correction}</p>}
+                  {issue.evidence && <p><span className="font-semibold text-gray-700">Evidence:</span> {issue.evidence}</p>}
+                  {issue.source_url ? (
+                    <div className="pt-1">
+                      <a
+                        href={issue.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-orange-600 font-semibold underline inline-flex items-center gap-1 hover:text-orange-700"
+                      >
+                        <span>Source: {sourceTitle}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="text-gray-600 text-[11px] font-medium">Source: {sourceTitle}</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
+
+      {/* Factual Verification */}
+      {factualChecks.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold text-darkText uppercase tracking-wider flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Factual Verification ({factualChecks.length})</span>
+          </h4>
+          <div className="space-y-2.5">
+            {factualChecks.map((item: any, idx: number) => {
+              if (typeof item === "string") {
+                return <div key={idx} className="p-3 bg-gray-50 rounded-lg text-xs text-gray-800">{item}</div>;
+              }
+              const isCorrect = String(item.status || "").toLowerCase().includes("correct");
+              return (
+                <div key={idx} className="p-3.5 bg-gray-50/80 rounded-xl border border-appBorder text-xs text-gray-800 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-darkText">{item.claim || `Claim ${idx + 1}`}</span>
+                    {item.status && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {item.status}
+                      </span>
+                    )}
+                  </div>
+                  {item.evidence && <p><span className="font-semibold text-gray-700">Evidence:</span> {item.evidence}</p>}
+                  {item.source_url ? (
+                    <a
+                      href={item.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-orange-600 font-semibold underline inline-flex items-center gap-1 hover:text-orange-700"
+                    >
+                      <span>{item.source_title || item.source_url}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : item.source_title ? (
+                    <span className="text-gray-600 font-medium">Source: {item.source_title}</span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Mathematical Verification */}
+      {(formulaChecks.length > 0 || numericalChecks.length > 0) && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold text-darkText uppercase tracking-wider flex items-center gap-1.5">
+            <CalculatorIcon className="w-4 h-4 text-orange-600" />
+            <span>Mathematical & Formula Verification</span>
+          </h4>
+          <div className="space-y-2.5">
+            {formulaChecks.map((fc: any, idx: number) => (
+              <RenderObjectCard key={idx} obj={fc} defaultTitle={`Formula Check ${idx + 1}`} />
+            ))}
+            {numericalChecks.map((nc: any, idx: number) => (
+              <RenderObjectCard key={idx} obj={nc} defaultTitle={`Numerical Check ${idx + 1}`} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Code Verification */}
+      {codeVerification && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-1">
+            <h4 className="text-xs font-bold text-darkText uppercase tracking-wider flex items-center gap-1.5">
+              <Code2 className="w-4 h-4 text-orange-600" />
+              <span>Code Verification</span>
+            </h4>
+            <span className="text-xs font-semibold bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+              {codeVerification.executed === true ? "Code Executed" : "Code Inspected"}
+            </span>
+          </div>
+          {codeVerification.overall_status && (
+            <p className="text-xs text-gray-700 font-medium">{codeVerification.overall_status}</p>
+          )}
+          {codeChecks.map((chk: any, idx: number) => (
+            <RenderObjectCard key={idx} obj={chk} defaultTitle={`Code Check ${idx + 1}`} />
+          ))}
+        </div>
+      )}
+
+      {/* Internal Consistency */}
+      {internalConsistency && (
+        <div className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-xs text-gray-800 space-y-1">
+          <span className="font-bold text-gray-700 block">Internal Consistency: {internalConsistency.status || "Check Passed"}</span>
+          {internalConsistency.issues && Array.isArray(internalConsistency.issues) && internalConsistency.issues.length > 0 && (
+            <ul className="list-disc pl-4 text-xs text-gray-700 space-y-0.5">
+              {internalConsistency.issues.map((iss: any, idx: number) => (
+                <li key={idx}>{String(iss)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Sources Checked */}
+      {sourcesChecked.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold text-darkText uppercase tracking-wider flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4 text-orange-600" />
+            <span>Sources Checked ({sourcesChecked.length})</span>
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {sourcesChecked.map((src: any, idx: number) => {
+              if (typeof src === "string") {
+                return (
+                  <div key={idx} className="p-3 bg-gray-50 rounded-lg text-xs font-medium text-gray-800">
+                    {src}
+                  </div>
+                );
+              }
+              const title = src.source_title || src.title || `Source ${idx + 1}`;
+              const type = src.source_type || src.type || "Academic Reference";
+              const url = src.source_url || src.url;
+
+              return (
+                <div key={idx} className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-xs text-gray-800 flex flex-col justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-darkText">{title}</div>
+                    <div className="text-[11px] text-gray-500 font-medium">{type}</div>
+                  </div>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-orange-600 font-semibold hover:text-orange-700 text-xs inline-flex items-center gap-1 w-fit"
+                    >
+                      <span>View Source</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
+// Fallback Calculator Icon
+function CalculatorIcon(props: any) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="16" height="20" x="4" y="2" rx="2" />
+      <line x1="8" x2="16" y1="6" y2="6" />
+      <line x1="16" x2="16" y1="14" y2="18" />
+      <path d="M16 10h.01" />
+      <path d="M12 10h.01" />
+      <path d="M8 10h.01" />
+      <path d="M12 14h.01" />
+      <path d="M8 14h.01" />
+      <path d="M12 18h.01" />
+      <path d="M8 18h.01" />
+    </svg>
+  );
+}
+
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) => {
-  const { notes, images, requestInfo } = data;
+  const { notes, verification, images, requestInfo } = data;
   const { className, subject, teachingType, unit, topic } = requestInfo;
 
   const handleDownloadNotes = () => {
@@ -402,6 +821,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
         </button>
       </div>
 
+      {/* VERIFICATION PANEL */}
+      <VerificationDisplay verification={verification} />
+
       {/* NO NOTES MSG IF NONE RETURNED */}
       {!notes && (
         <div className="bg-white rounded-xl border border-appBorder p-8 text-center text-secondaryText">
@@ -444,7 +866,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                 {/* Document Title */}
                 {notes.title && (
                   <h3 className="text-xl font-bold text-darkText border-b border-appBorder pb-2.5">
-                    {notes.title}
+                    {cleanSvgArtifacts(notes.title)}
                   </h3>
                 )}
 
@@ -455,7 +877,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <BookOpen className="w-4 h-4 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Introduction</h4>
                     </div>
-                    <p className="text-sm text-gray-800 leading-relaxed">{formatInlineBold(notes.introduction)}</p>
+                    <div className="text-sm text-gray-800 leading-relaxed">
+                      <RenderSmartContent value={notes.introduction} />
+                    </div>
                   </div>
                 )}
 
@@ -467,7 +891,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <h4 className="text-base font-bold text-orange-600">Definition</h4>
                     </div>
                     <div className="text-sm text-gray-800 bg-orange-50/70 p-4 rounded-xl border border-orange-100 font-medium leading-relaxed">
-                      {formatInlineBold(notes.definition)}
+                      <RenderSmartContent value={notes.definition} />
                     </div>
                   </div>
                 )}
@@ -479,11 +903,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <Tag className="w-4 h-4 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Key Terminology</h4>
                     </div>
-                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
-                      {keyTerminologyArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof item === "string" ? item : JSON.stringify(item)))}</li>
-                      ))}
-                    </ul>
+                    <RenderSmartContent value={keyTerminologyArr} />
                   </div>
                 )}
 
@@ -494,11 +914,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <Layers className="w-4 h-4 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Core Concepts</h4>
                     </div>
-                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
-                      {coreConceptsArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof item === "string" ? item : JSON.stringify(item)))}</li>
-                      ))}
-                    </ul>
+                    <RenderSmartContent value={coreConceptsArr} />
                   </div>
                 )}
 
@@ -508,8 +924,8 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Detailed Explanation</h4>
                     </div>
-                    <div className="text-sm text-gray-800 leading-relaxed space-y-2">
-                      {formatInlineBold(notes.explanation)}
+                    <div className="text-sm text-gray-800 leading-relaxed">
+                      <RenderSmartContent value={notes.explanation} />
                     </div>
                   </div>
                 )}
@@ -521,32 +937,17 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <ListOrdered className="w-4 h-4 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Types & Classifications</h4>
                     </div>
-                    <div className="space-y-3">
-                      {typesOrClassificationArr.map((item, i) => {
-                        if (typeof item === "object" && item !== null) {
-                          return <RenderObjectCard key={i} obj={item} defaultTitle={`Type ${i + 1}`} />;
-                        }
-                        return (
-                          <div key={i} className="text-sm text-gray-800 pl-4 border-l-2 border-orange-400 py-0.5">
-                            {formatInlineBold(cleanListItem(String(item)))}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <RenderSmartContent value={typesOrClassificationArr} />
                   </div>
                 )}
 
-                {/* Components */}
+                {/* System Components */}
                 {componentsArr.length > 0 && (
                   <div>
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">System Components</h4>
                     </div>
-                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
-                      {componentsArr.map((comp, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof comp === "string" ? comp : JSON.stringify(comp)))}</li>
-                      ))}
-                    </ul>
+                    <RenderSmartContent value={componentsArr} />
                   </div>
                 )}
 
@@ -556,11 +957,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Working & Mechanics</h4>
                     </div>
-                    <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
-                      {workingArr.map((w, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof w === "string" ? w : JSON.stringify(w)))}</li>
-                      ))}
-                    </ol>
+                    <RenderSmartContent value={workingArr} />
                   </div>
                 )}
 
@@ -570,32 +967,17 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Step-by-Step Procedure</h4>
                     </div>
-                    <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
-                      {stepsArr.map((step, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof step === "string" ? step : JSON.stringify(step)))}</li>
-                      ))}
-                    </ol>
+                    <RenderSmartContent value={stepsArr} />
                   </div>
                 )}
 
-                {/* Examples & Illustrations (Handles arrays of strings AND arrays of objects!) */}
+                {/* Examples & Illustrations */}
                 {examplesArr.length > 0 && (
                   <div>
                     <div className="mb-3 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Examples & Illustrations</h4>
                     </div>
-                    <div className="space-y-3">
-                      {examplesArr.map((ex, i) => {
-                        if (typeof ex === "object" && ex !== null) {
-                          return <RenderObjectCard key={i} obj={ex} defaultTitle={`Example ${i + 1}`} />;
-                        }
-                        return (
-                          <div key={i} className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-sm text-gray-800">
-                            {formatInlineBold(cleanListItem(String(ex)))}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <RenderSmartContent value={examplesArr} />
                   </div>
                 )}
 
@@ -606,61 +988,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <Code2 className="w-5 h-5 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Code Examples</h4>
                     </div>
-                    {codeExamplesArr.map((codeEx: any, i: number) => {
-                      if (typeof codeEx === "object" && codeEx !== null) {
-                        return (
-                          <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-md">
-                            <div className="bg-gray-800 px-4 py-3 flex items-center justify-between border-b border-gray-700">
-                              <div className="flex items-center gap-2">
-                                <FileCode className="w-4 h-4 text-orange-400" />
-                                <span className="font-bold text-white text-sm">
-                                  {codeEx.title || `Code Example ${i + 1}`}
-                                </span>
-                              </div>
-                              {codeEx.language && (
-                                <span className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-0.5 rounded border border-orange-500/30 uppercase font-mono">
-                                  {codeEx.language}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="p-4 space-y-3">
-                              {codeEx.purpose && (
-                                <p className="text-xs text-gray-300">
-                                  <span className="font-semibold text-orange-400">Purpose:</span> {codeEx.purpose}
-                                </p>
-                              )}
-
-                              {codeEx.code && (
-                                <div className="relative">
-                                  <pre className="p-4 bg-gray-950 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
-                                    <code>{codeEx.code}</code>
-                                  </pre>
-                                </div>
-                              )}
-
-                              {codeEx.explanation && (
-                                <div className="text-xs text-gray-300 pt-1">
-                                  <span className="font-semibold text-orange-400">Explanation:</span> {codeEx.explanation}
-                                </div>
-                              )}
-
-                              {(codeEx.expected_output || codeEx.expectedOutput) && (
-                                <div className="pt-2 border-t border-gray-800">
-                                  <span className="text-xs font-semibold text-orange-400 block mb-1">
-                                    Expected Output:
-                                  </span>
-                                  <pre className="p-3 bg-gray-950 text-gray-200 rounded text-xs font-mono whitespace-pre border border-gray-800">
-                                    <code>{codeEx.expected_output || codeEx.expectedOutput}</code>
-                                  </pre>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return <RenderObjectCard key={i} obj={codeEx} defaultTitle={`Code Example ${i + 1}`} />;
-                    })}
+                    <RenderSmartContent value={codeExamplesArr} />
                   </div>
                 )}
 
@@ -671,120 +999,28 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <PenTool className="w-5 h-5 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Diagram / Figure Instructions</h4>
                     </div>
-                    {diagramsArr.map((diag: any, i: number) => {
-                      if (typeof diag === "object" && diag !== null) {
-                        return (
-                          <div key={i} className="p-5 bg-orange-50/40 rounded-xl border border-orange-200 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h5 className="font-bold text-darkText text-sm">
-                                {diag.title || `Diagram ${i + 1}`}
-                              </h5>
-                              <span className="text-xs font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
-                                Figure Guide
-                              </span>
-                            </div>
-
-                            {diag.purpose && (
-                              <p className="text-xs text-gray-700">
-                                <span className="font-semibold text-orange-800">Purpose:</span> {diag.purpose}
-                              </p>
-                            )}
-
-                            {(diag.what_to_draw || diag.whatToDraw) && (
-                              <div className="p-3 bg-white rounded border border-orange-200 text-xs text-gray-800">
-                                <span className="font-bold text-orange-700 block mb-1">What to Draw in Answer Book:</span>
-                                {diag.what_to_draw || diag.whatToDraw}
-                              </div>
-                            )}
-
-                            {diag.labels && Array.isArray(diag.labels) && diag.labels.length > 0 && (
-                              <div>
-                                <span className="text-xs font-semibold text-orange-800 block mb-1">Labels to include:</span>
-                                <ul className="list-disc pl-5 text-xs text-gray-700 space-y-0.5">
-                                  {diag.labels.map((lbl: string, idx: number) => (
-                                    <li key={idx}>{cleanListItem(lbl)}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {diag.explanation && (
-                              <p className="text-xs text-gray-700 italic border-t border-orange-200/60 pt-2">
-                                {diag.explanation}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      }
-                      return <RenderObjectCard key={i} obj={diag} defaultTitle={`Diagram ${i + 1}`} />;
-                    })}
+                    <RenderSmartContent value={diagramsArr} />
                   </div>
                 )}
 
-                {/* Tables */}
+                {/* Comparative Tables */}
                 {tablesArr.length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-orange-100 pb-1">
                       <TableIcon className="w-5 h-5 text-orange-600" />
                       <h4 className="text-base font-bold text-orange-600">Comparative Tables</h4>
                     </div>
-                    {tablesArr.map((tbl: any, i: number) => {
-                      if (typeof tbl === "string") {
-                        const parsedTableElem = renderMarkdownTable(tbl);
-                        if (parsedTableElem) return <React.Fragment key={i}>{parsedTableElem}</React.Fragment>;
-                        return <div key={i} className="text-xs text-gray-800">{tbl}</div>;
-                      }
-                      if (typeof tbl === "object" && tbl !== null && tbl.headers && tbl.rows) {
-                        return (
-                          <div key={i} className="space-y-2">
-                            {tbl.title && <h5 className="font-bold text-darkText text-sm">{tbl.title}</h5>}
-                            <div className="overflow-x-auto rounded-lg border border-appBorder shadow-sm">
-                              <table className="w-full text-xs text-left text-gray-800">
-                                {tbl.headers && Array.isArray(tbl.headers) && (
-                                  <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
-                                    <tr>
-                                      {tbl.headers.map((hdr: string, idx: number) => (
-                                        <th key={idx} className="px-4 py-3 border-r border-orange-200/60 last:border-r-0">
-                                          {hdr}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                )}
-                                <tbody>
-                                  {tbl.rows && Array.isArray(tbl.rows) && tbl.rows.map((row: any[], rIdx: number) => (
-                                    <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
-                                      {Array.isArray(row) && row.map((cell: any, cIdx: number) => (
-                                        <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder border-r border-appBorder last:border-r-0">
-                                          {formatInlineBold(String(cell))}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        );
-                      }
-                      return <RenderObjectCard key={i} obj={tbl} defaultTitle={`Table ${i + 1}`} />;
-                    })}
+                    <RenderSmartContent value={tablesArr} />
                   </div>
                 )}
 
-                {/* Formulas */}
+                {/* Mathematical Formulas */}
                 {formulasArr.length > 0 && (
                   <div>
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Mathematical Formulas</h4>
                     </div>
-                    <div className="space-y-2">
-                      {formulasArr.map((form, i) => (
-                        <div key={i} className="p-3.5 bg-orange-50/60 rounded-xl border border-orange-100 font-mono text-xs text-orange-950">
-                          {cleanListItem(String(form))}
-                        </div>
-                      ))}
-                    </div>
+                    <RenderSmartContent value={formulasArr} />
                   </div>
                 )}
 
@@ -794,11 +1030,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Real-World Applications</h4>
                     </div>
-                    <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
-                      {applicationsArr.map((app, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof app === "string" ? app : JSON.stringify(app)))}</li>
-                      ))}
-                    </ul>
+                    <RenderSmartContent value={applicationsArr} />
                   </div>
                 )}
 
@@ -807,22 +1039,14 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                   {advantagesArr.length > 0 && (
                     <div className="p-4 bg-green-50/60 rounded-xl border border-green-100">
                       <h5 className="font-bold text-green-900 text-sm mb-2">Advantages</h5>
-                      <ul className="list-disc pl-4 text-xs text-green-950 space-y-1">
-                        {advantagesArr.map((adv, i) => (
-                          <li key={i}>{formatInlineBold(cleanListItem(typeof adv === "string" ? adv : JSON.stringify(adv)))}</li>
-                        ))}
-                      </ul>
+                      <RenderSmartContent value={advantagesArr} />
                     </div>
                   )}
 
                   {limitationsArr.length > 0 && (
                     <div className="p-4 bg-red-50/60 rounded-xl border border-red-100">
                       <h5 className="font-bold text-red-900 text-sm mb-2">Limitations</h5>
-                      <ul className="list-disc pl-4 text-xs text-red-950 space-y-1">
-                        {limitationsArr.map((lim, i) => (
-                          <li key={i}>{formatInlineBold(cleanListItem(typeof lim === "string" ? lim : JSON.stringify(lim)))}</li>
-                        ))}
-                      </ul>
+                      <RenderSmartContent value={limitationsArr} />
                     </div>
                   )}
                 </div>
@@ -834,11 +1058,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <HelpCircle className="w-4 h-4 text-orange-600" />
                       <h4 className="text-sm font-bold text-orange-950">Important RGPV Exam Points</h4>
                     </div>
-                    <ul className="list-disc pl-5 text-xs text-orange-950 space-y-1 font-medium">
-                      {importantExamPointsArr.map((pt, i) => (
-                        <li key={i}>{formatInlineBold(cleanListItem(typeof pt === "string" ? pt : JSON.stringify(pt)))}</li>
-                      ))}
-                    </ul>
+                    <RenderSmartContent value={importantExamPointsArr} />
                   </div>
                 )}
 
@@ -851,7 +1071,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <h4 className="text-lg font-bold text-orange-950">RGPV EXAM PREPARATION</h4>
                       </div>
                       <p className="text-xs text-orange-800 italic mt-0.5">
-                        Practice / probable questions based on the generated study material
+                        Practice / Probable Questions based on the generated study material
                       </p>
                     </div>
 
@@ -859,11 +1079,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(probableQuestions.short_answer || probableQuestions.shortAnswer) && (
                       <div>
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">Short Answer Questions</h5>
-                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
-                          {safeArray(probableQuestions.short_answer || probableQuestions.shortAnswer).map((q, i) => (
-                            <li key={i}>{cleanListItem(String(q))}</li>
-                          ))}
-                        </ol>
+                        <RenderSmartContent value={probableQuestions.short_answer || probableQuestions.shortAnswer} />
                       </div>
                     )}
 
@@ -871,11 +1087,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(probableQuestions.medium_answer || probableQuestions.mediumAnswer) && (
                       <div>
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">Medium Answer Questions</h5>
-                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
-                          {safeArray(probableQuestions.medium_answer || probableQuestions.mediumAnswer).map((q, i) => (
-                            <li key={i}>{cleanListItem(String(q))}</li>
-                          ))}
-                        </ol>
+                        <RenderSmartContent value={probableQuestions.medium_answer || probableQuestions.mediumAnswer} />
                       </div>
                     )}
 
@@ -883,11 +1095,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks) && (
                       <div>
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">7-Mark / Long Answer Questions</h5>
-                        <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-semibold">
-                          {safeArray(probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks).map((q, i) => (
-                            <li key={i}>{cleanListItem(String(q))}</li>
-                          ))}
-                        </ol>
+                        <RenderSmartContent value={probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks} />
                       </div>
                     )}
                   </div>
@@ -909,7 +1117,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {/* Purpose */}
                     {sevenMarkGuide.purpose && (
                       <p className="text-xs text-orange-50 leading-relaxed font-medium bg-orange-700/30 p-3 rounded-lg border border-orange-400/40">
-                        {sevenMarkGuide.purpose}
+                        {cleanSvgArtifacts(sevenMarkGuide.purpose)}
                       </p>
                     )}
 
@@ -920,11 +1128,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                           <Zap className="w-4 h-4 text-orange-200" />
                           <span>Recommended Answer Structure</span>
                         </div>
-                        <ul className="list-disc pl-5 text-xs text-orange-50 space-y-1">
-                          {safeArray(sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure).map((item, i) => (
-                            <li key={i}>{cleanListItem(String(item))}</li>
-                          ))}
-                        </ul>
+                        <RenderSmartContent value={sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure} />
                       </div>
                     )}
 
@@ -934,11 +1138,11 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <h4 className="font-bold text-sm text-orange-100 mb-2.5">3-Page Answer Strategy</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           {safeArray(sevenMarkGuide.page_wise_strategy || sevenMarkGuide.pageWiseStrategy).map((pageContent, i) => (
-                            <div key={i} className="bg-white/10 backdrop-blur-sm p-3.5 rounded-xl border border-white/20 text-xs text-orange-50">
-                              <span className="font-extrabold text-orange-200 block mb-1 text-xs uppercase">
+                            <div key={i} className="bg-white/10 backdrop-blur-sm p-3.5 rounded-xl border border-white/20 text-xs text-orange-50 space-y-1">
+                              <span className="font-extrabold text-orange-200 block text-xs uppercase">
                                 Page {i + 1}
                               </span>
-                              {typeof pageContent === "object" ? pageContent.content || JSON.stringify(pageContent) : cleanListItem(String(pageContent))}
+                              <RenderSmartContent value={typeof pageContent === "object" ? pageContent.content || pageContent : pageContent} />
                             </div>
                           ))}
                         </div>
@@ -963,7 +1167,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(sevenMarkGuide.diagram_strategy || sevenMarkGuide.diagramStrategy) && (
                       <div className="bg-orange-700/40 p-3.5 rounded-xl border border-orange-400/40 text-xs text-orange-50">
                         <span className="font-bold text-orange-200 block mb-0.5">Diagram Strategy:</span>
-                        {sevenMarkGuide.diagram_strategy || sevenMarkGuide.diagramStrategy}
+                        <RenderSmartContent value={sevenMarkGuide.diagram_strategy || sevenMarkGuide.diagramStrategy} />
                       </div>
                     )}
 
@@ -974,7 +1178,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                           <Lightbulb className="w-4 h-4 text-yellow-800" />
                           <span>MEMORY TRICK</span>
                         </div>
-                        <div className="text-sm">{sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick}</div>
+                        <div className="text-sm">
+                          <RenderSmartContent value={sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick} />
+                        </div>
                       </div>
                     )}
 
@@ -984,7 +1190,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <span className="font-bold text-orange-200 uppercase tracking-wider text-xs block">
                           IF YOU FORGET IN THE EXAM
                         </span>
-                        <p>{sevenMarkGuide.if_you_forget || sevenMarkGuide.ifYouForget}</p>
+                        <RenderSmartContent value={sevenMarkGuide.if_you_forget || sevenMarkGuide.ifYouForget} />
                       </div>
                     )}
 
@@ -995,11 +1201,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                           <AlertCircle className="w-3.5 h-3.5 text-red-300" />
                           <span>Common Mistakes to Avoid</span>
                         </div>
-                        <ul className="list-disc pl-5 space-y-0.5 text-red-100">
-                          {safeArray(sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes).map((m, i) => (
-                            <li key={i}>{cleanListItem(String(m))}</li>
-                          ))}
-                        </ul>
+                        <RenderSmartContent value={sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes} />
                       </div>
                     )}
                   </div>
@@ -1011,9 +1213,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <div className="mb-2 pb-1 border-b border-orange-100">
                       <h4 className="text-base font-bold text-orange-600">Summary & Takeaways</h4>
                     </div>
-                    <p className="text-sm text-gray-800 italic bg-gray-50 p-4 rounded-xl border border-gray-200 leading-relaxed">
-                      {formatInlineBold(notes.summary)}
-                    </p>
+                    <div className="text-sm text-gray-800 italic bg-gray-50 p-4 rounded-xl border border-gray-200 leading-relaxed">
+                      <RenderSmartContent value={notes.summary} />
+                    </div>
                   </div>
                 )}
               </>

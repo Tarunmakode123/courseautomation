@@ -54,6 +54,7 @@ export default function Home() {
 
       setResultData({
         notes: outputData.notes,
+        verification: outputData.verification || outputData.raw?.verification || null,
         images: outputData.images,
         requestInfo: {
           className: formData.className,
