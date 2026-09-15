@@ -18,7 +18,6 @@ import {
   PenTool,
   Award,
   AlertCircle,
-  HelpCircle as QuestionIcon,
   Lightbulb,
   FileQuestion,
   FileCode,
@@ -56,6 +55,33 @@ function safeArray(val: any): any[] {
   return [];
 }
 
+// Helper to strip leading numbers or bullets (e.g., "1. ", "1) ", "- ", "* ")
+function cleanListItem(text: any): string {
+  if (typeof text !== "string") return String(text || "");
+  return text.replace(/^(\d+[\.\)]|step\s*\d+:?|[-*•])\s*/i, "").trim();
+}
+
+// Helper to parse keywords into clean individual pills
+function parseKeywords(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.flatMap((v) => parseKeywords(v));
+  }
+  if (typeof val === "string") {
+    if (val.includes(",")) {
+      return val.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    if (val.includes("\n")) {
+      return val.split("\n").map((s) => s.trim()).filter(Boolean);
+    }
+    if (/[a-z][A-Z]/.test(val)) {
+      return val.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").map((s) => s.trim()).filter(Boolean);
+    }
+    return [val.trim()];
+  }
+  return [String(val)];
+}
+
 // Helper for inline **bold** text
 function formatInlineBold(text: string) {
   if (typeof text !== "string") return String(text || "");
@@ -68,7 +94,51 @@ function formatInlineBold(text: string) {
   });
 }
 
-// Helper component for markdown rendering
+// Render Markdown Tables as HTML tables
+function renderMarkdownTable(tableString: string) {
+  const lines = tableString.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const dataLines = lines.filter((line) => !/^\|?\s*:?-+:?\s*(\|?\s*:?-+:?\s*)+\|?$/.test(line));
+
+  if (dataLines.length === 0) return null;
+
+  const parseRow = (rowStr: string) => {
+    return rowStr.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  };
+
+  const headers = parseRow(dataLines[0]);
+  const rows = dataLines.slice(1).map(parseRow);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-appBorder my-4 shadow-sm">
+      <table className="w-full text-xs text-left text-gray-800">
+        <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
+          <tr>
+            {headers.map((h, idx) => (
+              <th key={idx} className="px-4 py-3 border-r border-orange-200/60 last:border-r-0">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rIdx) => (
+            <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+              {row.map((cell, cIdx) => (
+                <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder border-r border-appBorder last:border-r-0">
+                  {formatInlineBold(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Markdown text renderer
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   const paragraphs = (content || "").split("\n\n");
 
@@ -77,6 +147,12 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
       {paragraphs.map((p, idx) => {
         const trimmed = p.trim();
         if (!trimmed) return null;
+
+        // Check if paragraph is a markdown table
+        if (trimmed.includes("|") && trimmed.includes("\n")) {
+          const tableElem = renderMarkdownTable(trimmed);
+          if (tableElem) return <React.Fragment key={idx}>{tableElem}</React.Fragment>;
+        }
 
         if (trimmed.startsWith("### ")) {
           return (
@@ -89,7 +165,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           return (
             <h3 key={idx} className="text-lg font-bold text-darkText border-b border-orange-100 pb-1.5 mt-5 mb-3 flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-orange-500" />
-              {trimmed.replace(/^##\s*/, "")}
+              <span>{trimmed.replace(/^##\s*/, "")}</span>
             </h3>
           );
         }
@@ -106,7 +182,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           return (
             <ul key={idx} className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
               {items.map((item, i) => (
-                <li key={i}>{formatInlineBold(item)}</li>
+                <li key={i}>{formatInlineBold(cleanListItem(item))}</li>
               ))}
             </ul>
           );
@@ -117,7 +193,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           return (
             <ol key={idx} className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
               {items.map((item, i) => (
-                <li key={i}>{formatInlineBold(item)}</li>
+                <li key={i}>{formatInlineBold(cleanListItem(item))}</li>
               ))}
             </ol>
           );
@@ -126,7 +202,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         if (trimmed.startsWith("```")) {
           const codeText = trimmed.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "");
           return (
-            <pre key={idx} className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto my-3 whitespace-pre">
+            <pre key={idx} className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto my-3 whitespace-pre border border-gray-800">
               <code>{codeText}</code>
             </pre>
           );
@@ -136,6 +212,89 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
           <p key={idx} className="text-sm text-gray-800">
             {formatInlineBold(trimmed)}
           </p>
+        );
+      })}
+    </div>
+  );
+};
+
+// Generic Object Card Component that dynamically renders ANY object without dropping fields
+const RenderObjectCard: React.FC<{ obj: Record<string, any>; defaultTitle?: string }> = ({ obj, defaultTitle }) => {
+  if (typeof obj !== "object" || obj === null) {
+    return (
+      <div className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-sm text-gray-800">
+        {formatInlineBold(cleanListItem(String(obj)))}
+      </div>
+    );
+  }
+
+  const labelMap: Record<string, string> = {
+    title: "Title",
+    word: "Word / Term",
+    name: "Name",
+    problem: "Problem / Question",
+    question: "Question",
+    input: "Input",
+    analysis: "Analysis / Breakdown",
+    explanation: "Explanation",
+    description: "Description",
+    result: "Result / Answer",
+    answer: "Answer",
+    output: "Expected Output",
+    type: "Category / Type",
+    category: "Category",
+    code: "Code Snippet",
+    purpose: "Purpose",
+  };
+
+  const title = obj.title || obj.name || obj.word || defaultTitle;
+  const titleKeys = ["title", "name", "word"];
+
+  const entries = Object.entries(obj).filter(([k, v]) => !titleKeys.includes(k) && v !== null && v !== undefined && v !== "");
+
+  return (
+    <div className="p-4 bg-gray-50/90 rounded-xl border border-appBorder shadow-sm space-y-3">
+      {title && (
+        <div className="font-bold text-orange-700 text-sm border-b border-orange-100 pb-2 flex items-center gap-1.5">
+          <Sparkles className="w-4 h-4 text-orange-500" />
+          <span>{title}</span>
+        </div>
+      )}
+
+      {entries.map(([key, value]) => {
+        const label = labelMap[key] || key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (l) => l.toUpperCase());
+
+        if (key === "code" || key === "code_snippet") {
+          return (
+            <div key={key} className="space-y-1">
+              <span className="font-bold text-gray-700 text-xs block">{label}:</span>
+              <pre className="p-3 bg-gray-900 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
+                <code>{String(value)}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        if (Array.isArray(value)) {
+          return (
+            <div key={key} className="space-y-1">
+              <span className="font-bold text-gray-700 text-xs block">{label}:</span>
+              <ul className="list-disc pl-5 text-xs text-gray-800 space-y-1">
+                {value.map((item, i) => (
+                  <li key={i}>{formatInlineBold(cleanListItem(String(item)))}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        }
+
+        return (
+          <div key={key} className="text-xs text-gray-800 space-y-1">
+            <span className="font-bold text-gray-700 block">{label}:</span>
+            <div className="pl-2.5 border-l-2 border-orange-300 whitespace-pre-wrap font-sans leading-relaxed">
+              {formatInlineBold(String(value))}
+            </div>
+          </div>
         );
       })}
     </div>
@@ -198,7 +357,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
 
   const safeImagesObj = (images && typeof images === "object" && !Array.isArray(images) && (images as any).generated !== false) ? images : null;
 
-  // Extract arrays safely
+  // Extract sections safely
   const keyTerminologyArr = safeArray(notes?.keyTerminology);
   const coreConceptsArr = safeArray(notes?.coreConcepts);
   const componentsArr = safeArray(notes?.components);
@@ -282,99 +441,94 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
               <MarkdownText content={notes} />
             ) : (
               <>
-                {/* Title */}
+                {/* Document Title */}
                 {notes.title && (
                   <h3 className="text-xl font-bold text-darkText border-b border-appBorder pb-2.5">
                     {notes.title}
                   </h3>
                 )}
 
-                {/* 1. Introduction */}
+                {/* Introduction */}
                 {notes.introduction && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4" /> 1. Introduction
-                    </h4>
+                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-orange-100">
+                      <BookOpen className="w-4 h-4 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Introduction</h4>
+                    </div>
                     <p className="text-sm text-gray-800 leading-relaxed">{formatInlineBold(notes.introduction)}</p>
                   </div>
                 )}
 
-                {/* 2. Definition */}
+                {/* Definition */}
                 {notes.definition && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" /> 2. Definition
-                    </h4>
+                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-orange-100">
+                      <CheckCircle2 className="w-4 h-4 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Definition</h4>
+                    </div>
                     <div className="text-sm text-gray-800 bg-orange-50/70 p-4 rounded-xl border border-orange-100 font-medium leading-relaxed">
                       {formatInlineBold(notes.definition)}
                     </div>
                   </div>
                 )}
 
-                {/* 3. Key Terminology */}
+                {/* Key Terminology */}
                 {keyTerminologyArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <Tag className="w-4 h-4" /> 3. Key Terminology
-                    </h4>
+                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-orange-100">
+                      <Tag className="w-4 h-4 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Key Terminology</h4>
+                    </div>
                     <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {keyTerminologyArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(typeof item === "string" ? item : JSON.stringify(item))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof item === "string" ? item : JSON.stringify(item)))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* 4. Core Concepts */}
+                {/* Core Concepts */}
                 {coreConceptsArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <Layers className="w-4 h-4" /> 4. Core Concepts
-                    </h4>
+                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-orange-100">
+                      <Layers className="w-4 h-4 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Core Concepts</h4>
+                    </div>
                     <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {coreConceptsArr.map((item, i) => (
-                        <li key={i}>{formatInlineBold(typeof item === "string" ? item : JSON.stringify(item))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof item === "string" ? item : JSON.stringify(item)))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* 5. Detailed Explanation */}
+                {/* Detailed Explanation */}
                 {notes.explanation && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      5. Detailed Explanation
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Detailed Explanation</h4>
+                    </div>
                     <div className="text-sm text-gray-800 leading-relaxed space-y-2">
                       {formatInlineBold(notes.explanation)}
                     </div>
                   </div>
                 )}
 
-                {/* 6. Types & Classifications */}
+                {/* Types & Classifications */}
                 {typesOrClassificationArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-3 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <ListOrdered className="w-4 h-4" /> 6. Types & Classifications
-                    </h4>
+                    <div className="flex items-center gap-2 mb-3 pb-1 border-b border-orange-100">
+                      <ListOrdered className="w-4 h-4 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Types & Classifications</h4>
+                    </div>
                     <div className="space-y-3">
                       {typesOrClassificationArr.map((item, i) => {
                         if (typeof item === "object" && item !== null) {
-                          return (
-                            <div key={i} className="p-4 bg-gray-50 rounded-xl border border-appBorder">
-                              <h5 className="font-bold text-darkText text-sm mb-1">{item.type || item.title || `Type ${i+1}`}</h5>
-                              {item.description && <p className="text-xs text-gray-700 mb-2">{formatInlineBold(item.description)}</p>}
-                              {item.examples && Array.isArray(item.examples) && (
-                                <div className="text-xs text-orange-700 bg-orange-50/60 p-2.5 rounded border border-orange-100">
-                                  <span className="font-semibold">Examples:</span> {item.examples.join(", ")}
-                                </div>
-                              )}
-                            </div>
-                          );
+                          return <RenderObjectCard key={i} obj={item} defaultTitle={`Type ${i + 1}`} />;
                         }
                         return (
                           <div key={i} className="text-sm text-gray-800 pl-4 border-l-2 border-orange-400 py-0.5">
-                            {formatInlineBold(String(item))}
+                            {formatInlineBold(cleanListItem(String(item)))}
                           </div>
                         );
                       })}
@@ -382,68 +536,62 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                   </div>
                 )}
 
-                {/* 7. Components */}
+                {/* Components */}
                 {componentsArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      7. System Components
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">System Components</h4>
+                    </div>
                     <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {componentsArr.map((comp, i) => (
-                        <li key={i}>{formatInlineBold(typeof comp === "string" ? comp : JSON.stringify(comp))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof comp === "string" ? comp : JSON.stringify(comp)))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* 8. Working / Working Principle */}
+                {/* Working & Mechanics */}
                 {workingArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      8. Working & Mechanics
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Working & Mechanics</h4>
+                    </div>
                     <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
                       {workingArr.map((w, i) => (
-                        <li key={i}>{formatInlineBold(typeof w === "string" ? w : JSON.stringify(w))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof w === "string" ? w : JSON.stringify(w)))}</li>
                       ))}
                     </ol>
                   </div>
                 )}
 
-                {/* 9. Step-by-Step Procedure */}
+                {/* Step-by-Step Procedure */}
                 {stepsArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      9. Step-by-Step Procedure
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Step-by-Step Procedure</h4>
+                    </div>
                     <ol className="list-decimal pl-5 text-sm text-gray-800 space-y-1.5">
                       {stepsArr.map((step, i) => (
-                        <li key={i}>{formatInlineBold(typeof step === "string" ? step : JSON.stringify(step))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof step === "string" ? step : JSON.stringify(step)))}</li>
                       ))}
                     </ol>
                   </div>
                 )}
 
-                {/* 10 & 11. Examples / Worked Examples */}
+                {/* Examples & Illustrations (Handles arrays of strings AND arrays of objects!) */}
                 {examplesArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-3 border-b border-orange-100 pb-1">
-                      10. Examples & Illustrations
-                    </h4>
+                    <div className="mb-3 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Examples & Illustrations</h4>
+                    </div>
                     <div className="space-y-3">
                       {examplesArr.map((ex, i) => {
                         if (typeof ex === "object" && ex !== null) {
-                          return (
-                            <div key={i} className="p-3.5 bg-gray-50 rounded-lg border border-appBorder text-xs text-gray-800 flex flex-col gap-1">
-                              {ex.word && <div className="font-bold text-orange-700 text-sm">{ex.word}</div>}
-                              {ex.analysis && <div><span className="font-semibold text-gray-700">Analysis:</span> {ex.analysis}</div>}
-                              {ex.type && <div><span className="font-semibold text-gray-700">Category:</span> {ex.type}</div>}
-                            </div>
-                          );
+                          return <RenderObjectCard key={i} obj={ex} defaultTitle={`Example ${i + 1}`} />;
                         }
                         return (
-                          <div key={i} className="p-3 bg-gray-50 rounded-lg border border-appBorder text-xs text-gray-800">
-                            {formatInlineBold(String(ex))}
+                          <div key={i} className="p-3.5 bg-gray-50 rounded-xl border border-appBorder text-sm text-gray-800">
+                            {formatInlineBold(cleanListItem(String(ex)))}
                           </div>
                         );
                       })}
@@ -451,194 +599,217 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                   </div>
                 )}
 
-                {/* 12. Code Examples */}
+                {/* Code Examples */}
                 {codeExamplesArr.length > 0 && (
                   <div className="space-y-4">
-                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <Code2 className="w-5 h-5 text-orange-600" /> 12. Code Examples
-                    </h4>
-                    {codeExamplesArr.map((codeEx: any, i: number) => (
-                      <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-md">
-                        <div className="bg-gray-800 px-4 py-3 flex items-center justify-between border-b border-gray-700">
-                          <div className="flex items-center gap-2">
-                            <FileCode className="w-4 h-4 text-orange-400" />
-                            <span className="font-bold text-white text-sm">
-                              {codeEx.title || `Code Example ${i + 1}`}
-                            </span>
+                    <div className="flex items-center gap-2 border-b border-orange-100 pb-1">
+                      <Code2 className="w-5 h-5 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Code Examples</h4>
+                    </div>
+                    {codeExamplesArr.map((codeEx: any, i: number) => {
+                      if (typeof codeEx === "object" && codeEx !== null) {
+                        return (
+                          <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-md">
+                            <div className="bg-gray-800 px-4 py-3 flex items-center justify-between border-b border-gray-700">
+                              <div className="flex items-center gap-2">
+                                <FileCode className="w-4 h-4 text-orange-400" />
+                                <span className="font-bold text-white text-sm">
+                                  {codeEx.title || `Code Example ${i + 1}`}
+                                </span>
+                              </div>
+                              {codeEx.language && (
+                                <span className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-0.5 rounded border border-orange-500/30 uppercase font-mono">
+                                  {codeEx.language}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="p-4 space-y-3">
+                              {codeEx.purpose && (
+                                <p className="text-xs text-gray-300">
+                                  <span className="font-semibold text-orange-400">Purpose:</span> {codeEx.purpose}
+                                </p>
+                              )}
+
+                              {codeEx.code && (
+                                <div className="relative">
+                                  <pre className="p-4 bg-gray-950 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
+                                    <code>{codeEx.code}</code>
+                                  </pre>
+                                </div>
+                              )}
+
+                              {codeEx.explanation && (
+                                <div className="text-xs text-gray-300 pt-1">
+                                  <span className="font-semibold text-orange-400">Explanation:</span> {codeEx.explanation}
+                                </div>
+                              )}
+
+                              {(codeEx.expected_output || codeEx.expectedOutput) && (
+                                <div className="pt-2 border-t border-gray-800">
+                                  <span className="text-xs font-semibold text-orange-400 block mb-1">
+                                    Expected Output:
+                                  </span>
+                                  <pre className="p-3 bg-gray-950 text-gray-200 rounded text-xs font-mono whitespace-pre border border-gray-800">
+                                    <code>{codeEx.expected_output || codeEx.expectedOutput}</code>
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {codeEx.language && (
-                            <span className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-0.5 rounded border border-orange-500/30 uppercase font-mono">
-                              {codeEx.language}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="p-4 space-y-3">
-                          {codeEx.purpose && (
-                            <p className="text-xs text-gray-300">
-                              <span className="font-semibold text-orange-400">Purpose:</span> {codeEx.purpose}
-                            </p>
-                          )}
-
-                          {codeEx.code && (
-                            <div className="relative">
-                              <pre className="p-4 bg-gray-950 text-emerald-400 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed border border-gray-800">
-                                <code>{codeEx.code}</code>
-                              </pre>
-                            </div>
-                          )}
-
-                          {codeEx.explanation && (
-                            <div className="text-xs text-gray-300 pt-1">
-                              <span className="font-semibold text-orange-400">Explanation:</span> {codeEx.explanation}
-                            </div>
-                          )}
-
-                          {(codeEx.expected_output || codeEx.expectedOutput) && (
-                            <div className="pt-2 border-t border-gray-800">
-                              <span className="text-xs font-semibold text-orange-400 block mb-1">
-                                Expected Output:
-                              </span>
-                              <pre className="p-3 bg-gray-950 text-gray-200 rounded text-xs font-mono whitespace-pre border border-gray-800">
-                                <code>{codeEx.expected_output || codeEx.expectedOutput}</code>
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      }
+                      return <RenderObjectCard key={i} obj={codeEx} defaultTitle={`Code Example ${i + 1}`} />;
+                    })}
                   </div>
                 )}
 
-                {/* 13. Diagram Instructions */}
+                {/* Diagram Instructions */}
                 {diagramsArr.length > 0 && (
                   <div className="space-y-4">
-                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <PenTool className="w-5 h-5 text-orange-600" /> 13. Diagram / Figure Instructions
-                    </h4>
-                    {diagramsArr.map((diag: any, i: number) => (
-                      <div key={i} className="p-5 bg-orange-50/40 rounded-xl border border-orange-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h5 className="font-bold text-darkText text-sm">
-                            {diag.title || `Diagram ${i + 1}`}
-                          </h5>
-                          <span className="text-xs font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
-                            Figure Guide
-                          </span>
-                        </div>
+                    <div className="flex items-center gap-2 border-b border-orange-100 pb-1">
+                      <PenTool className="w-5 h-5 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Diagram / Figure Instructions</h4>
+                    </div>
+                    {diagramsArr.map((diag: any, i: number) => {
+                      if (typeof diag === "object" && diag !== null) {
+                        return (
+                          <div key={i} className="p-5 bg-orange-50/40 rounded-xl border border-orange-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-bold text-darkText text-sm">
+                                {diag.title || `Diagram ${i + 1}`}
+                              </h5>
+                              <span className="text-xs font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
+                                Figure Guide
+                              </span>
+                            </div>
 
-                        {diag.purpose && (
-                          <p className="text-xs text-gray-700">
-                            <span className="font-semibold text-orange-800">Purpose:</span> {diag.purpose}
-                          </p>
-                        )}
+                            {diag.purpose && (
+                              <p className="text-xs text-gray-700">
+                                <span className="font-semibold text-orange-800">Purpose:</span> {diag.purpose}
+                              </p>
+                            )}
 
-                        {(diag.what_to_draw || diag.whatToDraw) && (
-                          <div className="p-3 bg-white rounded border border-orange-200 text-xs text-gray-800">
-                            <span className="font-bold text-orange-700 block mb-1">What to Draw in Answer Book:</span>
-                            {diag.what_to_draw || diag.whatToDraw}
+                            {(diag.what_to_draw || diag.whatToDraw) && (
+                              <div className="p-3 bg-white rounded border border-orange-200 text-xs text-gray-800">
+                                <span className="font-bold text-orange-700 block mb-1">What to Draw in Answer Book:</span>
+                                {diag.what_to_draw || diag.whatToDraw}
+                              </div>
+                            )}
+
+                            {diag.labels && Array.isArray(diag.labels) && diag.labels.length > 0 && (
+                              <div>
+                                <span className="text-xs font-semibold text-orange-800 block mb-1">Labels to include:</span>
+                                <ul className="list-disc pl-5 text-xs text-gray-700 space-y-0.5">
+                                  {diag.labels.map((lbl: string, idx: number) => (
+                                    <li key={idx}>{cleanListItem(lbl)}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {diag.explanation && (
+                              <p className="text-xs text-gray-700 italic border-t border-orange-200/60 pt-2">
+                                {diag.explanation}
+                              </p>
+                            )}
                           </div>
-                        )}
-
-                        {diag.labels && Array.isArray(diag.labels) && diag.labels.length > 0 && (
-                          <div>
-                            <span className="text-xs font-semibold text-orange-800 block mb-1">Labels to include:</span>
-                            <ul className="list-disc pl-5 text-xs text-gray-700 space-y-0.5">
-                              {diag.labels.map((lbl: string, idx: number) => (
-                                <li key={idx}>{lbl}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {diag.explanation && (
-                          <p className="text-xs text-gray-700 italic border-t border-orange-200/60 pt-2">
-                            {diag.explanation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                        );
+                      }
+                      return <RenderObjectCard key={i} obj={diag} defaultTitle={`Diagram ${i + 1}`} />;
+                    })}
                   </div>
                 )}
 
-                {/* 14. Tables */}
+                {/* Tables */}
                 {tablesArr.length > 0 && (
                   <div className="space-y-4">
-                    <h4 className="text-base font-bold text-orange-600 border-b border-orange-100 pb-1 flex items-center gap-2">
-                      <TableIcon className="w-5 h-5 text-orange-600" /> 14. Comparative Tables
-                    </h4>
-                    {tablesArr.map((tbl: any, i: number) => (
-                      <div key={i} className="space-y-2">
-                        {tbl.title && <h5 className="font-bold text-darkText text-sm">{tbl.title}</h5>}
-                        <div className="overflow-x-auto rounded-lg border border-appBorder">
-                          <table className="w-full text-xs text-left text-gray-800">
-                            {tbl.headers && Array.isArray(tbl.headers) && (
-                              <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
-                                <tr>
-                                  {tbl.headers.map((hdr: string, idx: number) => (
-                                    <th key={idx} className="px-4 py-3">
-                                      {hdr}
-                                    </th>
+                    <div className="flex items-center gap-2 border-b border-orange-100 pb-1">
+                      <TableIcon className="w-5 h-5 text-orange-600" />
+                      <h4 className="text-base font-bold text-orange-600">Comparative Tables</h4>
+                    </div>
+                    {tablesArr.map((tbl: any, i: number) => {
+                      if (typeof tbl === "string") {
+                        const parsedTableElem = renderMarkdownTable(tbl);
+                        if (parsedTableElem) return <React.Fragment key={i}>{parsedTableElem}</React.Fragment>;
+                        return <div key={i} className="text-xs text-gray-800">{tbl}</div>;
+                      }
+                      if (typeof tbl === "object" && tbl !== null && tbl.headers && tbl.rows) {
+                        return (
+                          <div key={i} className="space-y-2">
+                            {tbl.title && <h5 className="font-bold text-darkText text-sm">{tbl.title}</h5>}
+                            <div className="overflow-x-auto rounded-lg border border-appBorder shadow-sm">
+                              <table className="w-full text-xs text-left text-gray-800">
+                                {tbl.headers && Array.isArray(tbl.headers) && (
+                                  <thead className="bg-orange-100 text-orange-950 font-bold uppercase border-b border-orange-200">
+                                    <tr>
+                                      {tbl.headers.map((hdr: string, idx: number) => (
+                                        <th key={idx} className="px-4 py-3 border-r border-orange-200/60 last:border-r-0">
+                                          {hdr}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                )}
+                                <tbody>
+                                  {tbl.rows && Array.isArray(tbl.rows) && tbl.rows.map((row: any[], rIdx: number) => (
+                                    <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
+                                      {Array.isArray(row) && row.map((cell: any, cIdx: number) => (
+                                        <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder border-r border-appBorder last:border-r-0">
+                                          {formatInlineBold(String(cell))}
+                                        </td>
+                                      ))}
+                                    </tr>
                                   ))}
-                                </tr>
-                              </thead>
-                            )}
-                            <tbody>
-                              {tbl.rows && Array.isArray(tbl.rows) && tbl.rows.map((row: any[], rIdx: number) => (
-                                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}>
-                                  {Array.isArray(row) && row.map((cell: any, cIdx: number) => (
-                                    <td key={cIdx} className="px-4 py-2.5 border-t border-appBorder">
-                                      {String(cell)}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return <RenderObjectCard key={i} obj={tbl} defaultTitle={`Table ${i + 1}`} />;
+                    })}
                   </div>
                 )}
 
-                {/* 15. Formulas */}
+                {/* Formulas */}
                 {formulasArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      15. Mathematical Formulas
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Mathematical Formulas</h4>
+                    </div>
                     <div className="space-y-2">
                       {formulasArr.map((form, i) => (
-                        <div key={i} className="p-3 bg-orange-50/60 rounded-lg border border-orange-100 font-mono text-xs text-orange-950">
-                          {String(form)}
+                        <div key={i} className="p-3.5 bg-orange-50/60 rounded-xl border border-orange-100 font-mono text-xs text-orange-950">
+                          {cleanListItem(String(form))}
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* 16. Real-World Applications */}
+                {/* Real-World Applications */}
                 {applicationsArr.length > 0 && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      16. Real-World Applications
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Real-World Applications</h4>
+                    </div>
                     <ul className="list-disc pl-5 text-sm text-gray-800 space-y-1.5">
                       {applicationsArr.map((app, i) => (
-                        <li key={i}>{formatInlineBold(typeof app === "string" ? app : JSON.stringify(app))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof app === "string" ? app : JSON.stringify(app)))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* 17 & 18. Advantages & Limitations */}
+                {/* Advantages & Limitations */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {advantagesArr.length > 0 && (
                     <div className="p-4 bg-green-50/60 rounded-xl border border-green-100">
-                      <h5 className="font-bold text-green-900 text-sm mb-2">17. Advantages</h5>
+                      <h5 className="font-bold text-green-900 text-sm mb-2">Advantages</h5>
                       <ul className="list-disc pl-4 text-xs text-green-950 space-y-1">
                         {advantagesArr.map((adv, i) => (
-                          <li key={i}>{formatInlineBold(typeof adv === "string" ? adv : JSON.stringify(adv))}</li>
+                          <li key={i}>{formatInlineBold(cleanListItem(typeof adv === "string" ? adv : JSON.stringify(adv)))}</li>
                         ))}
                       </ul>
                     </div>
@@ -646,39 +817,39 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
 
                   {limitationsArr.length > 0 && (
                     <div className="p-4 bg-red-50/60 rounded-xl border border-red-100">
-                      <h5 className="font-bold text-red-900 text-sm mb-2">18. Limitations</h5>
+                      <h5 className="font-bold text-red-900 text-sm mb-2">Limitations</h5>
                       <ul className="list-disc pl-4 text-xs text-red-950 space-y-1">
                         {limitationsArr.map((lim, i) => (
-                          <li key={i}>{formatInlineBold(typeof lim === "string" ? lim : JSON.stringify(lim))}</li>
+                          <li key={i}>{formatInlineBold(cleanListItem(typeof lim === "string" ? lim : JSON.stringify(lim)))}</li>
                         ))}
                       </ul>
                     </div>
                   )}
                 </div>
 
-                {/* 20. Important RGPV Exam Points */}
+                {/* Important RGPV Exam Points */}
                 {importantExamPointsArr.length > 0 && (
                   <div className="p-5 bg-orange-50 rounded-xl border border-orange-200">
-                    <h4 className="text-sm font-bold text-orange-950 mb-2 flex items-center gap-2">
+                    <div className="flex items-center gap-2 mb-2">
                       <HelpCircle className="w-4 h-4 text-orange-600" />
-                      20. Important RGPV Exam Points
-                    </h4>
+                      <h4 className="text-sm font-bold text-orange-950">Important RGPV Exam Points</h4>
+                    </div>
                     <ul className="list-disc pl-5 text-xs text-orange-950 space-y-1 font-medium">
                       {importantExamPointsArr.map((pt, i) => (
-                        <li key={i}>{formatInlineBold(typeof pt === "string" ? pt : JSON.stringify(pt))}</li>
+                        <li key={i}>{formatInlineBold(cleanListItem(typeof pt === "string" ? pt : JSON.stringify(pt)))}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* 21. Probable Examination Questions */}
+                {/* Probable Examination Questions */}
                 {probableQuestions && (
                   <div className="p-6 bg-orange-50/80 rounded-xl border border-orange-200 space-y-4">
                     <div className="border-b border-orange-200 pb-2">
-                      <h4 className="text-lg font-bold text-orange-950 flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <Award className="w-5 h-5 text-orange-600" />
-                        RGPV EXAM PREPARATION
-                      </h4>
+                        <h4 className="text-lg font-bold text-orange-950">RGPV EXAM PREPARATION</h4>
+                      </div>
                       <p className="text-xs text-orange-800 italic mt-0.5">
                         Practice / probable questions based on the generated study material
                       </p>
@@ -690,7 +861,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">Short Answer Questions</h5>
                         <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
                           {safeArray(probableQuestions.short_answer || probableQuestions.shortAnswer).map((q, i) => (
-                            <li key={i}>{q}</li>
+                            <li key={i}>{cleanListItem(String(q))}</li>
                           ))}
                         </ol>
                       </div>
@@ -702,7 +873,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">Medium Answer Questions</h5>
                         <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-medium">
                           {safeArray(probableQuestions.medium_answer || probableQuestions.mediumAnswer).map((q, i) => (
-                            <li key={i}>{q}</li>
+                            <li key={i}>{cleanListItem(String(q))}</li>
                           ))}
                         </ol>
                       </div>
@@ -714,7 +885,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                         <h5 className="font-bold text-orange-900 text-sm mb-1.5">7-Mark / Long Answer Questions</h5>
                         <ol className="list-decimal pl-5 text-xs text-orange-950 space-y-1 font-semibold">
                           {safeArray(probableQuestions.long_answer_7_marks || probableQuestions.longAnswer7Marks).map((q, i) => (
-                            <li key={i}>{q}</li>
+                            <li key={i}>{cleanListItem(String(q))}</li>
                           ))}
                         </ol>
                       </div>
@@ -722,7 +893,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                   </div>
                 )}
 
-                {/* 22. How to Write a 7-Mark Answer */}
+                {/* How to Write a 7-Mark Answer */}
                 {sevenMarkGuide && (
                   <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 sm:p-7 rounded-2xl shadow-lg space-y-5">
                     <div className="border-b border-orange-400/60 pb-3 flex items-center justify-between">
@@ -745,12 +916,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {/* Recommended Answer Structure */}
                     {(sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure) && (
                       <div>
-                        <h4 className="font-bold text-sm text-orange-100 mb-2 flex items-center gap-1.5">
-                          <Zap className="w-4 h-4 text-orange-200" /> Recommended Answer Structure
-                        </h4>
+                        <div className="flex items-center gap-1.5 mb-2 font-bold text-sm text-orange-100">
+                          <Zap className="w-4 h-4 text-orange-200" />
+                          <span>Recommended Answer Structure</span>
+                        </div>
                         <ul className="list-disc pl-5 text-xs text-orange-50 space-y-1">
                           {safeArray(sevenMarkGuide.recommended_structure || sevenMarkGuide.recommendedStructure).map((item, i) => (
-                            <li key={i}>{item}</li>
+                            <li key={i}>{cleanListItem(String(item))}</li>
                           ))}
                         </ul>
                       </div>
@@ -766,7 +938,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                               <span className="font-extrabold text-orange-200 block mb-1 text-xs uppercase">
                                 Page {i + 1}
                               </span>
-                              {typeof pageContent === "object" ? pageContent.content || JSON.stringify(pageContent) : String(pageContent)}
+                              {typeof pageContent === "object" ? pageContent.content || JSON.stringify(pageContent) : cleanListItem(String(pageContent))}
                             </div>
                           ))}
                         </div>
@@ -777,9 +949,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(sevenMarkGuide.important_keywords || sevenMarkGuide.importantKeywords) && (
                       <div>
                         <h4 className="font-bold text-sm text-orange-100 mb-2">Important Keywords to Include</h4>
-                        <div className="flex flex-wrap gap-1.5">
-                          {safeArray(sevenMarkGuide.important_keywords || sevenMarkGuide.importantKeywords).map((kw, i) => (
-                            <span key={i} className="bg-white text-orange-800 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm">
+                        <div className="flex flex-wrap gap-2">
+                          {parseKeywords(sevenMarkGuide.important_keywords || sevenMarkGuide.importantKeywords).map((kw, i) => (
+                            <span key={i} className="bg-white text-orange-900 text-xs font-bold px-3 py-1 rounded-md shadow-sm">
                               {kw}
                             </span>
                           ))}
@@ -799,7 +971,8 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {(sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick) && (
                       <div className="bg-yellow-400 text-yellow-950 p-4 rounded-xl font-bold shadow-sm text-xs space-y-1">
                         <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-yellow-900">
-                          <Lightbulb className="w-4 h-4 text-yellow-800" /> MEMORY TRICK
+                          <Lightbulb className="w-4 h-4 text-yellow-800" />
+                          <span>MEMORY TRICK</span>
                         </div>
                         <div className="text-sm">{sevenMarkGuide.memory_trick || sevenMarkGuide.memoryTrick}</div>
                       </div>
@@ -818,12 +991,13 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     {/* Common Mistakes */}
                     {(sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes) && (
                       <div className="bg-red-950/40 p-4 rounded-xl border border-red-400/40 text-xs text-red-100 space-y-1">
-                        <span className="font-bold text-red-200 uppercase tracking-wider text-xs flex items-center gap-1">
-                          <AlertCircle className="w-3.5 h-3.5 text-red-300" /> Common Mistakes to Avoid
-                        </span>
+                        <div className="flex items-center gap-1 text-xs uppercase font-bold tracking-wider text-red-200">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-300" />
+                          <span>Common Mistakes to Avoid</span>
+                        </div>
                         <ul className="list-disc pl-5 space-y-0.5 text-red-100">
                           {safeArray(sevenMarkGuide.common_mistakes || sevenMarkGuide.commonMistakes).map((m, i) => (
-                            <li key={i}>{m}</li>
+                            <li key={i}>{cleanListItem(String(m))}</li>
                           ))}
                         </ul>
                       </div>
@@ -831,12 +1005,12 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                   </div>
                 )}
 
-                {/* 30. Summary */}
+                {/* Summary */}
                 {notes.summary && (
                   <div>
-                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
-                      30. Summary & Takeaways
-                    </h4>
+                    <div className="mb-2 pb-1 border-b border-orange-100">
+                      <h4 className="text-base font-bold text-orange-600">Summary & Takeaways</h4>
+                    </div>
                     <p className="text-sm text-gray-800 italic bg-gray-50 p-4 rounded-xl border border-gray-200 leading-relaxed">
                       {formatInlineBold(notes.summary)}
                     </p>
@@ -854,7 +1028,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-darkText flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-orange-500" />
-              Visual Learning Material
+              <span>Visual Learning Material</span>
             </h3>
             <span className="text-xs text-secondaryText">4 Visual Formats Generated</span>
           </div>
@@ -895,7 +1069,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
           className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm rounded-xl shadow transition inline-flex items-center gap-2"
         >
           <RotateCcw className="w-4 h-4" />
-          Create New Material
+          <span>Create New Material</span>
         </button>
       </div>
     </div>
@@ -942,7 +1116,7 @@ const VisualCard: React.FC<VisualCardProps> = ({ title, imageUrl, onDownload }) 
           }`}
         >
           <Download className="w-4 h-4" />
-          Download
+          <span>Download</span>
         </button>
       </div>
     </div>
