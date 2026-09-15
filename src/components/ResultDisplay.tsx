@@ -11,6 +11,8 @@ import {
   BookOpen,
   Layers,
   HelpCircle,
+  Tag,
+  ListOrdered,
 } from "lucide-react";
 
 export interface GeneratedResultData {
@@ -35,7 +37,7 @@ interface ResultDisplayProps {
   onReset: () => void;
 }
 
-// Simple helper component to render Markdown text cleanly
+// Simple helper component to render Markdown text cleanly if string notes are returned
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   const paragraphs = content.split("\n\n");
 
@@ -236,13 +238,20 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
               <MarkdownText content={notes} />
             ) : (
               <>
+                {/* Title */}
+                {notes.title && (
+                  <h3 className="text-xl font-bold text-darkText border-b border-appBorder pb-2">
+                    {notes.title}
+                  </h3>
+                )}
+
                 {/* Introduction */}
                 {notes.introduction && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <BookOpen className="w-4 h-4" /> Introduction
                     </h4>
-                    <p className="text-sm text-gray-700">{notes.introduction}</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">{notes.introduction}</p>
                   </div>
                 )}
 
@@ -252,9 +261,23 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4" /> Definition
                     </h4>
-                    <p className="text-sm text-gray-700 bg-orange-50/50 p-3 rounded-md border border-orange-100 font-medium">
+                    <p className="text-sm text-gray-800 bg-orange-50/70 p-3.5 rounded-lg border border-orange-100 font-medium leading-relaxed">
                       {notes.definition}
                     </p>
+                  </div>
+                )}
+
+                {/* Key Terminology */}
+                {notes.keyTerminology && notes.keyTerminology.length > 0 && (
+                  <div>
+                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <Tag className="w-4 h-4" /> Key Terminology
+                    </h4>
+                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
+                      {notes.keyTerminology.map((item: string, i: number) => (
+                        <li key={i}>{formatInlineBold(item)}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -264,21 +287,35 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
                       <Layers className="w-4 h-4" /> Core Concepts
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
                       {notes.coreConcepts.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
+                        <li key={i}>{formatInlineBold(item)}</li>
                       ))}
                     </ul>
                   </div>
                 )}
 
-                {/* Explanation */}
+                {/* Detailed Explanation */}
                 {notes.explanation && (
                   <div>
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Detailed Explanation
                     </h4>
-                    <p className="text-sm text-gray-700">{notes.explanation}</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">{notes.explanation}</p>
+                  </div>
+                )}
+
+                {/* Types & Classification */}
+                {notes.typesOrClassification && notes.typesOrClassification.length > 0 && (
+                  <div>
+                    <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1 flex items-center gap-2">
+                      <ListOrdered className="w-4 h-4" /> Types & Classifications
+                    </h4>
+                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
+                      {notes.typesOrClassification.map((item: string, i: number) => (
+                        <li key={i}>{formatInlineBold(item)}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -290,7 +327,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     </h4>
                     <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1.5">
                       {notes.steps.map((step: string, i: number) => (
-                        <li key={i}>{step}</li>
+                        <li key={i}>{formatInlineBold(step)}</li>
                       ))}
                     </ol>
                   </div>
@@ -330,9 +367,9 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     <h4 className="text-base font-bold text-orange-600 mb-2 border-b border-orange-100 pb-1">
                       Real-World Applications
                     </h4>
-                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                    <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1.5">
                       {notes.applications.map((app: string, i: number) => (
-                        <li key={i}>{app}</li>
+                        <li key={i}>{formatInlineBold(app)}</li>
                       ))}
                     </ul>
                   </div>
@@ -345,7 +382,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <h5 className="font-bold text-green-800 text-sm mb-2">Advantages</h5>
                       <ul className="list-disc pl-4 text-xs text-green-900 space-y-1">
                         {notes.advantages.map((adv: string, i: number) => (
-                          <li key={i}>{adv}</li>
+                          <li key={i}>{formatInlineBold(adv)}</li>
                         ))}
                       </ul>
                     </div>
@@ -356,7 +393,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                       <h5 className="font-bold text-red-800 text-sm mb-2">Limitations</h5>
                       <ul className="list-disc pl-4 text-xs text-red-900 space-y-1">
                         {notes.limitations.map((lim: string, i: number) => (
-                          <li key={i}>{lim}</li>
+                          <li key={i}>{formatInlineBold(lim)}</li>
                         ))}
                       </ul>
                     </div>
@@ -372,7 +409,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset }) =
                     </h4>
                     <ul className="list-disc pl-5 text-xs text-orange-950 space-y-1 font-medium">
                       {notes.importantExamPoints.map((pt: string, i: number) => (
-                        <li key={i}>{pt}</li>
+                        <li key={i}>{formatInlineBold(pt)}</li>
                       ))}
                     </ul>
                   </div>

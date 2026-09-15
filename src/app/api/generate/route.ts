@@ -1,44 +1,95 @@
 import { NextResponse } from "next/server";
 
-// Helper to normalize notes from n8n response (Gemini structure, plain text, or structured object)
+// Helper to normalize notes object keys
+function normalizeNotesObject(obj: any): any {
+  if (!obj || typeof obj !== "object") return obj;
+
+  // Merge root object and nested content object if present
+  const source = obj.content && typeof obj.content === "object" ? { ...obj, ...obj.content } : obj;
+
+  return {
+    title: source.title || source.heading || "",
+    introduction: source.introduction || source.intro || "",
+    definition: source.definition || source.def || "",
+    keyTerminology: source.key_terminology || source.keyTerminology || source.terminology || [],
+    coreConcepts: source.core_concepts || source.coreConcepts || source.concepts || [],
+    explanation: source.detailed_explanation || source.explanation || source.detailedExplanation || source.description || "",
+    typesOrClassification: source.types_or_classification || source.typesOrClassification || source.types || source.classifications || [],
+    steps: source.steps || source.procedure || [],
+    examples: source.examples || source.code_examples || [],
+    applications: source.applications || source.uses || [],
+    advantages: source.advantages || source.benefits || [],
+    limitations: source.limitations || source.disadvantages || [],
+    importantExamPoints: source.important_exam_points || source.importantExamPoints || source.exam_points || [],
+    summary: source.summary || source.conclusion || "",
+  };
+}
+
+// Helper to try parsing string as JSON
+function tryParseJson(str: string): any {
+  if (!str || typeof str !== "string") return null;
+  const cleanStr = str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+  if (cleanStr.startsWith("{") || cleanStr.startsWith("[")) {
+    try {
+      return JSON.parse(cleanStr);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Helper to normalize notes from n8n response (Gemini structure, JSON string, plain text, or structured object)
 function parseNotes(notesObj: any): any {
   if (!notesObj) return null;
 
+  let rawString: string | null = null;
+
   // Case 1: Plain string
-  if (typeof notesObj === "string") return notesObj;
+  if (typeof notesObj === "string") {
+    rawString = notesObj;
+  }
 
   // Case 2: Gemini API / n8n structure { generated: true, content: { role: 'model', parts: [ { text: '...' } ] } }
-  if (notesObj.content) {
-    if (typeof notesObj.content === "string") return notesObj.content;
-    if (notesObj.content.parts && Array.isArray(notesObj.content.parts)) {
+  else if (notesObj.content) {
+    if (typeof notesObj.content === "string") {
+      rawString = notesObj.content;
+    } else if (notesObj.content.parts && Array.isArray(notesObj.content.parts)) {
       const partsText = notesObj.content.parts
         .map((p: any) => (typeof p === "string" ? p : p.text || ""))
         .filter(Boolean)
         .join("\n\n");
-      if (partsText) return partsText;
+      if (partsText) rawString = partsText;
+    } else if (notesObj.content.text) {
+      rawString = notesObj.content.text;
+    } else if (typeof notesObj.content === "object") {
+      return normalizeNotesObject(notesObj);
     }
-    if (notesObj.content.text) return notesObj.content.text;
   }
 
-  // Case 3: { text: "..." } or { markdown: "..." } or { raw: "..." }
-  if (notesObj.text && typeof notesObj.text === "string") return notesObj.text;
-  if (notesObj.markdown && typeof notesObj.markdown === "string") return notesObj.markdown;
-
-  // Case 4: Structured object with section fields (introduction, definition, etc.)
-  if (
-    notesObj.introduction ||
-    notesObj.definition ||
-    notesObj.coreConcepts ||
-    notesObj.explanation ||
-    notesObj.steps
-  ) {
-    return notesObj;
+  // Case 3: { text: "..." } or { markdown: "..." }
+  else if (notesObj.text && typeof notesObj.text === "string") {
+    rawString = notesObj.text;
+  } else if (notesObj.markdown && typeof notesObj.markdown === "string") {
+    rawString = notesObj.markdown;
   }
 
-  // Case 5: If generated is false
-  if (notesObj.generated === false) return null;
+  // Case 4: Direct structured object with fields
+  else if (typeof notesObj === "object" && notesObj.generated !== false) {
+    return normalizeNotesObject(notesObj);
+  }
 
-  return notesObj;
+  // If we have a rawString, attempt to parse it as JSON
+  if (rawString) {
+    const parsedJson = tryParseJson(rawString);
+    if (parsedJson) {
+      return normalizeNotesObject(parsedJson);
+    }
+    // Return formatted markdown string if not JSON
+    return rawString;
+  }
+
+  return null;
 }
 
 // Helper to normalize images from n8n response

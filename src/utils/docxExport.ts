@@ -1,12 +1,14 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import { saveAs } from "file-saver";
 
 interface NotesData {
   title?: string;
   introduction?: string;
   definition?: string;
+  keyTerminology?: string[];
   coreConcepts?: string[];
   explanation?: string;
+  typesOrClassification?: string[];
   examples?: string[];
   steps?: string[];
   applications?: string[];
@@ -145,8 +147,10 @@ export async function downloadNotesDocx(params: {
 
     renderSection("Introduction", notesContent.introduction);
     renderSection("Definition", notesContent.definition);
+    renderSection("Key Terminology", notesContent.keyTerminology);
     renderSection("Core Concepts", notesContent.coreConcepts);
-    renderSection("Explanation", notesContent.explanation);
+    renderSection("Detailed Explanation", notesContent.explanation);
+    renderSection("Types & Classification", notesContent.typesOrClassification);
     renderSection("Step-by-Step Procedure", notesContent.steps);
     renderSection("Examples & Code Illustration", notesContent.examples);
     renderSection("Lab Objectives", notesContent.labObjectives);
